@@ -10,10 +10,12 @@ class Database:
         self.conn: Optional[sqlite3.Connection] = None
 
     def connect(self):
-        self.conn = sqlite3.connect(self.db_path, timeout=30)
+        self.conn = sqlite3.connect(self.db_path, timeout=60)
         self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA synchronous=NORMAL")
         self.conn.execute("PRAGMA foreign_keys=ON")
-        self.conn.execute("PRAGMA busy_timeout=30000")
+        self.conn.execute("PRAGMA busy_timeout=60000")
+        self.conn.execute("PRAGMA cache_size=-64000")
         self.conn.row_factory = sqlite3.Row
         return self.conn
 

@@ -61,31 +61,32 @@ class ScanWorker(BaseWorker):
         _config_discovery(engine)
         path = Path(self.caminho)
 
-        if path.is_file():
-            self.log.emit(f"[scan] Arquivo: {path.name}")
-            engine.scan_sheets(self.caminho)
-            self.progress.emit(100, "Scan concluido")
+        try:
+            if path.is_file():
+                self.log.emit(f"[scan] Arquivo: {path.name}")
+                engine.scan_sheets(self.caminho)
+                self.progress.emit(100, "Scan concluido")
 
-        elif path.is_dir():
-            ext_order = ["*.xlsx", "*.xlsb", "*.xlsm", "*.csv", "*.parquet"]
-            todos = []
-            for ext in ext_order:
-                todos.extend(path.rglob(ext))
-            total = len(todos)
-            self.log.emit(f"[scan] {total} arquivos encontrados")
+            elif path.is_dir():
+                ext_order = ["*.xlsx", "*.xlsb", "*.xlsm", "*.csv", "*.parquet"]
+                todos = []
+                for ext in ext_order:
+                    todos.extend(path.rglob(ext))
+                total = len(todos)
+                self.log.emit(f"[scan] {total} arquivos encontrados")
 
-            for i, f in enumerate(todos):
-                if self._cancelled:
-                    return
-                engine.scan_sheets(str(f))
-                pct = int((i + 1) / total * 100)
-                self.progress.emit(pct, f"Scan: {f.name}")
+                for i, f in enumerate(todos):
+                    if self._cancelled:
+                        return
+                    engine.scan_sheets(str(f))
+                    pct = int((i + 1) / total * 100)
+                    self.progress.emit(pct, f"Scan: {f.name}")
 
-            self.progress.emit(100, "Scan concluido")
-        else:
-            raise FileNotFoundError(f"Diretorio/arquivo nao encontrado: {self.caminho}")
-
-        db.close()
+                self.progress.emit(100, "Scan concluido")
+            else:
+                raise FileNotFoundError(f"Diretorio/arquivo nao encontrado: {self.caminho}")
+        finally:
+            db.close()
 
 
 class IngestWorker(BaseWorker):
@@ -99,30 +100,31 @@ class IngestWorker(BaseWorker):
         engine = IngestionEngine(db)
         path = Path(self.caminho)
 
-        if path.is_file():
-            self.log.emit(f"[ingest] {path.name}")
-            engine.ingestir_arquivo(self.caminho)
-            self.progress.emit(100, "Ingestao concluida")
+        try:
+            if path.is_file():
+                self.log.emit(f"[ingest] {path.name}")
+                engine.ingestir_arquivo(self.caminho)
+                self.progress.emit(100, "Ingestao concluida")
 
-        elif path.is_dir():
-            ext_order = ["*.xlsx", "*.xlsb", "*.xlsm", "*.csv", "*.parquet"]
-            todos = []
-            for ext in ext_order:
-                todos.extend(path.rglob(ext))
-            total = len(todos)
+            elif path.is_dir():
+                ext_order = ["*.xlsx", "*.xlsb", "*.xlsm", "*.csv", "*.parquet"]
+                todos = []
+                for ext in ext_order:
+                    todos.extend(path.rglob(ext))
+                total = len(todos)
 
-            for i, f in enumerate(todos):
-                if self._cancelled:
-                    return
-                engine.ingestir_arquivo(str(f))
-                pct = int((i + 1) / total * 100)
-                self.progress.emit(pct, f"Ingest: {f.name}")
+                for i, f in enumerate(todos):
+                    if self._cancelled:
+                        return
+                    engine.ingestir_arquivo(str(f))
+                    pct = int((i + 1) / total * 100)
+                    self.progress.emit(pct, f"Ingest: {f.name}")
 
-            self.progress.emit(100, "Ingestao concluida")
-        else:
-            raise FileNotFoundError(f"Diretorio/arquivo nao encontrado: {self.caminho}")
-
-        db.close()
+                self.progress.emit(100, "Ingestao concluida")
+            else:
+                raise FileNotFoundError(f"Diretorio/arquivo nao encontrado: {self.caminho}")
+        finally:
+            db.close()
 
 
 class BothWorker(BaseWorker):
@@ -150,16 +152,18 @@ class BothWorker(BaseWorker):
         total = len(todos)
 
         self.log.emit(f"[both] {total} arquivos encontrados em {self.caminho}")
-        for i, f in enumerate(todos):
-            if self._cancelled:
-                return
-            discover.scan_sheets(str(f))
-            ingest.ingestir_arquivo(str(f))
-            pct = int((i + 1) / total * 100)
-            self.progress.emit(pct, f"Scan+Ingest: {f.name}")
+        try:
+            for i, f in enumerate(todos):
+                if self._cancelled:
+                    return
+                discover.scan_sheets(str(f))
+                ingest.ingestir_arquivo(str(f))
+                pct = int((i + 1) / total * 100)
+                self.progress.emit(pct, f"Scan+Ingest: {f.name}")
 
-        self.progress.emit(100, "Scan + Ingest concluido")
-        db.close()
+            self.progress.emit(100, "Scan + Ingest concluido")
+        finally:
+            db.close()
 
 
 class TransformWorker(BaseWorker):
@@ -172,27 +176,28 @@ class TransformWorker(BaseWorker):
         db = self._get_db()
         engine = TransformEngine(db)
 
-        if self.schema_hash:
-            hid = self.schema_hash
-            self.log.emit(f"[transform] Schema: {hid[:12]}...")
-            engine.unpivot_para_star_schema(hid)
-            self.progress.emit(100, "Transform concluido")
-        else:
-            hashes = db.conn.execute(
-                "SELECT DISTINCT schema_hash FROM sheets WHERE schema_hash IS NOT NULL"
-            ).fetchall()
-            total = len(hashes)
-            for i, h in enumerate(hashes):
-                if self._cancelled:
-                    return
-                hid = h["schema_hash"]
-                self.log.emit(f"[transform] Schema {i + 1}/{total}: {hid[:12]}...")
+        try:
+            if self.schema_hash:
+                hid = self.schema_hash
+                self.log.emit(f"[transform] Schema: {hid[:12]}...")
                 engine.unpivot_para_star_schema(hid)
-                pct = int((i + 1) / total * 100)
-                self.progress.emit(pct, f"Transform: schema {i + 1}/{total}")
-            self.progress.emit(100, "Transform concluido")
-
-        db.close()
+                self.progress.emit(100, "Transform concluido")
+            else:
+                hashes = db.conn.execute(
+                    "SELECT DISTINCT schema_hash FROM sheets WHERE schema_hash IS NOT NULL"
+                ).fetchall()
+                total = len(hashes)
+                for i, h in enumerate(hashes):
+                    if self._cancelled:
+                        return
+                    hid = h["schema_hash"]
+                    self.log.emit(f"[transform] Schema {i + 1}/{total}: {hid[:12]}...")
+                    engine.unpivot_para_star_schema(hid)
+                    pct = int((i + 1) / total * 100)
+                    self.progress.emit(pct, f"Transform: schema {i + 1}/{total}")
+                self.progress.emit(100, "Transform concluido")
+        finally:
+            db.close()
 
 
 class FullPipelineWorker(BaseWorker):
@@ -226,25 +231,27 @@ class FullPipelineWorker(BaseWorker):
         total = len(todos)
         self.log.emit(f"[pipeline] Iniciando pipeline com {total} arquivos em {self.caminho}")
 
-        for i, f in enumerate(todos):
-            if self._cancelled:
-                return
-            pct_base = int(i / total * 66)
-            self.progress.emit(pct_base, f"Scan+Ingest: {f.name}")
-            discover.scan_sheets(str(f))
-            ingest.ingestir_arquivo(str(f))
+        try:
+            for i, f in enumerate(todos):
+                if self._cancelled:
+                    return
+                pct_base = int(i / total * 66)
+                self.progress.emit(pct_base, f"Scan+Ingest: {f.name}")
+                discover.scan_sheets(str(f))
+                ingest.ingestir_arquivo(str(f))
 
-        hashes = db.conn.execute(
-            "SELECT DISTINCT schema_hash FROM sheets WHERE schema_hash IS NOT NULL"
-        ).fetchall()
-        h_total = len(hashes)
-        for j, h in enumerate(hashes):
-            if self._cancelled:
-                return
-            hid = h["schema_hash"]
-            pct = 66 + int((j + 1) / h_total * 34)
-            self.progress.emit(pct, f"Transform: {hid[:12]}...")
-            transform.unpivot_para_star_schema(hid)
+            hashes = db.conn.execute(
+                "SELECT DISTINCT schema_hash FROM sheets WHERE schema_hash IS NOT NULL"
+            ).fetchall()
+            h_total = len(hashes)
+            for j, h in enumerate(hashes):
+                if self._cancelled:
+                    return
+                hid = h["schema_hash"]
+                pct = 66 + int((j + 1) / h_total * 34)
+                self.progress.emit(pct, f"Transform: {hid[:12]}...")
+                transform.unpivot_para_star_schema(hid)
 
-        self.progress.emit(100, "Pipeline concluido!")
-        db.close()
+            self.progress.emit(100, "Pipeline concluido!")
+        finally:
+            db.close()
