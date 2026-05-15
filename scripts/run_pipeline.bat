@@ -1,5 +1,5 @@
 @echo off
-REM Planilha BI Pilot - Execucao headless para Windows Task Scheduler
+REM SheetPilot - Execucao headless para Windows Task Scheduler
 REM Uso: agendar no Task Scheduler para rodar diariamente
 REM
 REM 1. Abra o Task Scheduler
@@ -7,15 +7,15 @@ REM 2. Criar tarefa basica
 REM 3. Acionador: "Diariamente" ou "Ao iniciar"
 REM 4. Acao: "Iniciar um programa"
 REM    Programa: C:\caminho\para\run_pipeline.bat
-REM    Iniciar em: C:\Users\usuario\Desktop\Projetos IA\planilha_bi_pilot
+REM    Iniciar em: C:\Users\usuario\Desktop\Projetos IA\sheetpilot_pilot
 
 cd /d "%~dp0"
 
-set DB_PATH=%USERPROFILE%\planilha_bi_db\pilot.db
+set DB_PATH=%USERPROFILE%\sheetpilot_db\pilot.db
 set MIGRATIONS=migrations
 set DATA_DIR=C:\caminho\para\planilhas
 
-echo [%DATE% %TIME%] Iniciando pipeline Planilha BI Pilot >> pipeline_log.txt
+echo [%DATE% %TIME%] Iniciando pipeline SheetPilot >> pipeline_log.txt
 
 REM Pipeline completo (scan + ingest + transform)
 python main.py --cli full-pipeline --db "%DB_PATH%" --migrations "%MIGRATIONS%" >> pipeline_log.txt 2>&1

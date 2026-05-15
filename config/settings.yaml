@@ -1,4 +1,4 @@
-# Configuracao global do Planilha BI Pilot
+# Configuracao global do SheetPilot
 database:
   path: data/pilot.db
   migrations_dir: migrations
@@ -7,6 +7,7 @@ scan:
   extensoes:
     - .xlsx
     - .xlsb
+    - .xlsm
     - .csv
     - .parquet
   excluir_padroes: [ "~$", ".tmp" ]

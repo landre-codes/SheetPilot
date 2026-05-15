@@ -49,9 +49,7 @@ def ingest(ctx, caminho):
     if path.is_file():
         engine.ingestir_arquivo(caminho)
     elif path.is_dir():
-        for f in path.rglob("*.xlsx"):
-            engine.ingestir_arquivo(str(f))
-        for f in path.rglob("*.xls"):
+        for f in path.rglob("*.xlsx") + list(path.rglob("*.xlsb")) + list(path.rglob("*.xlsm")) + list(path.rglob("*.csv")) + list(path.rglob("*.parquet")):
             engine.ingestir_arquivo(str(f))
     else:
         click.echo(f"Erro: {caminho} nao encontrado")

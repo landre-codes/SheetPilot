@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal, QSize, QStringListModel
 from PySide6.QtGui import QFont, QColor
 import qtawesome as qta
+from src.localization import _
 
 from src.gui.workers import (
     ScanWorker, IngestWorker, BothWorker,
@@ -22,7 +23,7 @@ from src.gui.backup import BackupManager, DatabaseCleanup
 
 
 # ── Histórico de operações da sessão ─────────
-_LOG_FILE = Path.home() / "planilha_bi_db" / "historico.json"
+_LOG_FILE = Path.home() / "sheetpilot_db" / "historico.json"
 
 @dataclass
 class Operacao:
@@ -188,16 +189,31 @@ _ICONES_TIPO = {
 
 class DashboardPage(BasePage):
     def _build_ui(self):
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        inner = QWidget()
+        layout = QVBoxLayout(inner)
         layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(12)
+        scroll.setWidget(inner)
+        outer.addWidget(scroll)
 
         # Welcome
-        welcome = QLabel("Planilha BI Pilot")
-        welcome.setStyleSheet("font-size: 24px; font-weight: bold; color: #E0E0E0;")
+        welcome = QLabel(_("SheetPilot"))
+        welcome.setStyleSheet("""
+            font-family: 'Montserrat', 'Segoe UI', sans-serif;
+            font-size: 28px; font-weight: 600; letter-spacing: 2px;
+            color: #E0F7FA;
+        """)
         layout.addWidget(welcome)
 
-        sub = QLabel("Central de tratamento e correção de planilhas")
-        sub.setStyleSheet("color: #78909C; font-size: 13px; margin-bottom: 12px;")
+        sub = QLabel(_("Smart spreadsheet correction & normalization"))
+        sub.setStyleSheet("color: #80DEEA; font-size: 13px; letter-spacing: 0.5px; margin-bottom: 8px;")
         layout.addWidget(sub)
 
         # Next step indicator
@@ -234,11 +250,14 @@ class DashboardPage(BasePage):
 
         # Quick action cards
         acoes = QHBoxLayout()
-        acoes.setSpacing(12)
+        acoes.setSpacing(8)
+        tip_import = _("Importar planilhas")
+        tip_ajustar = _("Ajustar tabelas invertidas")
+        tip_export = _("Exportar planilhas corrigidas")
         for texto, icone, cor, dica, pagina in [
-            ("Importar", "fa5s.file-import", "#1976D2", "Importar planilhas da pasta", "importar"),
-            ("Ajustar", "fa5s.sync-alt", "#7B1FA2", "Ajustar planilhas invertidas", "transformar"),
-            ("Exportar", "fa5s.file-export", "#388E3C", "Exportar planilhas corrigidas", "exportar"),
+            (_("Importar"), "fa5s.file-import", "#1976D2", tip_import, "importar"),
+            (_("Ajustar"), "fa5s.sync-alt", "#7B1FA2", tip_ajustar, "transformar"),
+            (_("Exportar"), "fa5s.file-export", "#388E3C", tip_export, "exportar"),
         ]:
             card = QFrame()
             card.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -254,13 +273,14 @@ class DashboardPage(BasePage):
             """)
             cl = QVBoxLayout(card)
             cl.setAlignment(Qt.AlignCenter)
+            cl.setSpacing(4)
             ic = QLabel()
             ic.setPixmap(qta.icon(icone, color=cor).pixmap(32, 32))
             ic.setAlignment(Qt.AlignCenter)
             cl.addWidget(ic)
             lb = QLabel(texto)
             lb.setAlignment(Qt.AlignCenter)
-            lb.setStyleSheet(f"color: #E0E0E0; font-size: 14px; font-weight: bold; margin-top: 4px;")
+            lb.setStyleSheet(f"color: #E0E0E0; font-size: 13px; font-weight: bold; margin-top: 4px;")
             cl.addWidget(lb)
             card.mousePressEvent = lambda e, p=pagina: self._ir_para(p)
             card.setToolTip(dica)
@@ -268,13 +288,14 @@ class DashboardPage(BasePage):
 
         layout.addLayout(acoes)
 
-        # Status cards (apenas 3 simples)
+        # Status cards
         self.stat_labels = {}
         status_grid = QHBoxLayout()
+        status_grid.setSpacing(10)
         for chave, rotulo, icone, cor in [
-            ("arquivos", "Arquivos", "fa5s.file-excel", "#2196F3"),
-            ("sheets", "Planilhas", "fa5s.table", "#4CAF50"),
-            ("raw_data", "Linhas lidas", "fa5s.database", "#FF9800"),
+            ("arquivos", _("Arquivos"), "fa5s.file-excel", "#2196F3"),
+            ("sheets", _("Planilhas"), "fa5s.table", "#4CAF50"),
+            ("raw_data", _("Linhas lidas"), "fa5s.database", "#FF9800"),
         ]:
             f = QFrame()
             f.setStyleSheet(f"""
@@ -285,8 +306,11 @@ class DashboardPage(BasePage):
                 }}
             """)
             fl = QVBoxLayout(f)
+            fl.setContentsMargins(12, 8, 12, 8)
+            fl.setSpacing(4)
             hl = QHBoxLayout()
             hl.setContentsMargins(0, 0, 0, 0)
+            hl.setSpacing(6)
             ic = QLabel()
             ic.setPixmap(qta.icon(icone, color=cor).pixmap(18, 18))
             hl.addWidget(ic)
@@ -330,29 +354,25 @@ class DashboardPage(BasePage):
         self.div_icon = QLabel()
         self.div_icon.setPixmap(qta.icon("fa5s.exclamation-triangle", color="#FFA726").pixmap(14, 14))
         divl.addWidget(self.div_icon)
-        self.div_label = QLabel("Nenhuma divergência detectada")
+        self.div_label = QLabel(_("Nenhuma divergência detectada"))
         self.div_label.setStyleSheet("color: #607D8B; font-size: 11px; background: transparent;")
         divl.addWidget(self.div_label, stretch=1)
         self.div_frame.hide()
         layout.addWidget(self.div_frame)
 
         # Session history
-        layout.addSpacing(6)
-        hist_title = QLabel("Histórico da sessão")
+        hist_title = QLabel(_("Histórico da sessão"))
         hist_title.setStyleSheet("color: #90CAF9; font-size: 13px; font-weight: bold;")
         layout.addWidget(hist_title)
-        layout.addSpacing(3)
         self.hist_list = QListWidget()
         self.hist_list.setStyleSheet("""
             QListWidget {
                 background-color: #0d1117; border: 1px solid #30363d;
                 border-radius: 6px; color: #c9d1d9; font-size: 11px;
-                max-height: 160px;
             }
             QListWidget::item { padding: 4px 8px; border-bottom: 1px solid #161b2e; }
         """)
-        layout.addWidget(self.hist_list)
-        layout.addSpacing(8)
+        layout.addWidget(self.hist_list, stretch=1)
 
         self._atualizar_historico()
 
@@ -385,7 +405,7 @@ class DashboardPage(BasePage):
             txt += "  (OK)" if not precisa else "  (atrasado)"
             self.bk_info.setText(txt)
         else:
-            self.bk_info.setText("Nenhum backup encontrado")
+            self.bk_info.setText(_("Nenhum backup encontrado"))
 
     def _atualizar_historico(self):
         self.hist_list.clear()
@@ -461,7 +481,7 @@ class DashboardPage(BasePage):
             self.div_label.setText(" | ".join(txts))
             self.div_frame.show()
         else:
-            self.div_label.setText("Nenhuma divergência detectada")
+            self.div_label.setText(_("Nenhuma divergência detectada"))
             self.div_frame.hide()
 
         self._atualizar_backup()
@@ -524,7 +544,7 @@ class ImportPage(BasePage):
 
         layout.addLayout(path_row)
 
-        fmt_info = QLabel("Formatos: .xlsx  ›  .xlsb  ›  .csv  ›  .parquet")
+        fmt_info = QLabel("Formatos: .xlsx  ›  .xlsb  ›  .xlsm  ›  .csv  ›  .parquet")
         fmt_info.setStyleSheet("color: #546E7A; font-size: 11px; margin-bottom: 12px;")
         layout.addWidget(fmt_info)
 
@@ -588,7 +608,7 @@ class ImportPage(BasePage):
             p = Path(path)
             if p.is_dir():
                 self.path_edit.setText(str(p.absolute()))
-            elif p.suffix.lower() in (".xlsx", ".xlsb", ".csv", ".parquet"):
+            elif p.suffix.lower() in (".xlsx", ".xlsb", ".xlsm", ".csv", ".parquet"):
                 self.path_edit.setText(str(p.parent.absolute()))
             break
 
@@ -665,7 +685,7 @@ class ImportPage(BasePage):
 
 
 # ── Recent paths helpers ─────────────────────
-_RECENT_FILE = Path.home() / "planilha_bi_db" / "recent_paths.json"
+_RECENT_FILE = Path.home() / "sheetpilot_db" / "recent_paths.json"
 
 def _load_recent() -> list[str]:
     try:
@@ -789,7 +809,7 @@ class TransformPage(BasePage):
 # ─────────────────────────────────────────────
 #  Exportar
 # ─────────────────────────────────────────────
-EXPORT_DIR_DEFAULT = str(Path.home() / "planilha_bi_db" / "exports")
+EXPORT_DIR_DEFAULT = str(Path.home() / "sheetpilot_db" / "exports")
 
 # ── Queries para re-pivot (voltar ao formato largo original) ──
 
@@ -852,7 +872,7 @@ class ExportPage(BasePage):
         """)
         fmtl = QVBoxLayout(fmt_card)
         fl1 = QHBoxLayout()
-        lbl_fmt = QLabel("Formato de saída")
+        lbl_fmt = QLabel(_("Formato de saída"))
         lbl_fmt.setStyleSheet("color: #90CAF9; font-size: 13px; font-weight: bold;")
         fl1.addWidget(lbl_fmt)
         fl1.addStretch()
@@ -893,7 +913,7 @@ class ExportPage(BasePage):
             QListWidget::item { padding: 6px 10px; }
             QListWidget::item:selected { background-color: #1565C0; }
         """)
-        self.sheet_list.setToolTip("Planilhas disponíveis para exportação")
+        self.sheet_list.setToolTip(_("Planilhas disponíveis para exportação"))
         layout.addWidget(self.sheet_list)
 
         self.btn_export = _mkbtn("  Exportar Todas", "fa5s.file-export", "#2E7D32", "#388E3C")
@@ -1190,7 +1210,7 @@ class ExportPage(BasePage):
             if not groups_by_file:
                 continue
 
-            name_base = arq["nome_arquivo"].replace(".xlsx", "").replace(".xlsb", "").replace(".csv", "").replace(".parquet", "")
+            name_base = arq["nome_arquivo"].replace(".xlsx", "").replace(".xlsb", "").replace(".xlsm", "").replace(".csv", "").replace(".parquet", "")
             safe_name = name_base.replace(" ", "_").replace("/", "-")[:40]
             fname = f"{safe_name}_corrigida_{ts}.{fmt}"
             fpath = dest / fname
@@ -1380,6 +1400,29 @@ class SettingsPage(BasePage):
         dbl.addWidget(btn_bkup)
         layout.addWidget(grp_db)
 
+        # Language
+        grp_lang = QGroupBox("Idioma / Language")
+        grp_lang.setStyleSheet("""
+            QGroupBox { color: #90CAF9; font-size: 13px; font-weight: bold;
+                        border: 1px solid #2a2a4e; border-radius: 8px;
+                        margin-top: 12px; padding: 16px; }
+        """)
+        langl = QVBoxLayout(grp_lang)
+        self.lang_combo = QComboBox()
+        self.lang_combo.setStyleSheet("""
+            QComboBox {
+                background-color: #0d1117; color: #c9d1d9;
+                border: 1px solid #30363d; border-radius: 6px;
+                padding: 8px 12px; font-size: 12px;
+            }
+        """)
+        from src.localization import available_languages, set_language
+        for code, name in available_languages():
+            self.lang_combo.addItem(f"{name} ({code})", code)
+        self.lang_combo.currentIndexChanged.connect(self._change_language)
+        langl.addWidget(self.lang_combo)
+        layout.addWidget(grp_lang)
+
         # Backup list
         self.bk_list = QListWidget()
         self.bk_list.setStyleSheet("""
@@ -1449,6 +1492,17 @@ class SettingsPage(BasePage):
 
         layout.addStretch()
 
+    def _change_language(self, idx: int):
+        code = self.lang_combo.itemData(idx)
+        if code:
+            from src.localization import set_language
+            set_language(code)
+            QMessageBox.information(self, "SheetPilot",
+                "Idioma alterado. Reinicie a aplicação para aplicar.\n\n"
+                "Language changed. Restart the application to apply.")
+            # In a full implementation, you'd trigger UI refresh here
+            # For now, user needs to restart
+
     def _refresh_backups(self):
         self.bk_list.clear()
         bm = BackupManager(self._db_path())
@@ -1466,7 +1520,7 @@ class SettingsPage(BasePage):
             QMessageBox.warning(self, "Aviso", "Selecione um backup na lista.")
             return
         path = item.data(Qt.UserRole)
-        confirm = QMessageBox.question(self, "Restaurar",
+        confirm = QMessageBox.question(self, _("Restaurar"),
             "Isso substituirá o banco atual. Continuar?",
             QMessageBox.Yes | QMessageBox.No)
         if confirm == QMessageBox.Yes:

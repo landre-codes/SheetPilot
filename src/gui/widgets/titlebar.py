@@ -1,4 +1,5 @@
 import qtawesome as qta
+from src.localization import _
 from PySide6.QtCore import Qt, Signal, QPoint, QSize
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton
@@ -30,12 +31,12 @@ class TitleBar(QWidget):
         self.icon_label = QLabel()
         self.icon_label.setPixmap(qta.icon("fa5s.database", color="#42A5F5").pixmap(18, 18))
         self.icon_label.setFixedWidth(24)
-        self.icon_label.setToolTip("Planilha BI Pilot")
+        self.icon_label.setToolTip("SheetPilot")
         layout.addWidget(self.icon_label)
 
-        self.title_label = QLabel("Planilha BI Pilot")
-        self.title_label.setStyleSheet("color: #E0E0E0; font-size: 13px; font-weight: 600;")
-        self.title_label.setFont(QFont("Segoe UI", 10, QFont.Weight.DemiBold))
+        self.title_label = QLabel("SheetPilot")
+        self.title_label.setStyleSheet("color: #E0E0E0; font-size: 13px; font-weight: 600; letter-spacing: 1.5px;")
+        self.title_label.setFont(QFont("Montserrat", 10, QFont.Weight.DemiBold))
         layout.addWidget(self.title_label)
 
         self.page_label = QLabel()
@@ -44,17 +45,17 @@ class TitleBar(QWidget):
         layout.addStretch()
 
         self.btn_min = QPushButton()
-        self._style_btn(self.btn_min, "fa5s.window-minimize", "Minimizar")
+        self._style_btn(self.btn_min, "fa5s.window-minimize", _("Minimizar"))
         self.btn_min.clicked.connect(lambda: self.window_action.emit(self.MINIMIZE))
         layout.addWidget(self.btn_min)
 
         self.btn_max = QPushButton()
-        self._style_btn(self.btn_max, "fa5s.window-maximize", "Maximizar")
+        self._style_btn(self.btn_max, "fa5s.window-maximize", _("Maximizar"))
         self.btn_max.clicked.connect(lambda: self.window_action.emit(self.MAXIMIZE))
         layout.addWidget(self.btn_max)
 
         self.btn_close = QPushButton()
-        self._style_btn(self.btn_close, "fa5s.times", "Fechar", close=True)
+        self._style_btn(self.btn_close, "fa5s.times", _("Fechar"), close=True)
         self.btn_close.clicked.connect(lambda: self.window_action.emit(self.CLOSE))
         layout.addWidget(self.btn_close)
 

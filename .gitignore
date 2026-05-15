@@ -1,32 +1,32 @@
-# Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
-*.pyo
-*.egg-info/
-dist/
-build/
-*.egg
+*$py.class
+
+# Virtual environment
+.venv/
+venv/
+env/
 
 # IDE
 .idea/
+*.iml
 .vscode/
-*.swp
-*.swo
 
-# Database local
+# Project data (generated at runtime)
+data/
 *.db
-*.db-journal
-*.db-wal
+sheetpilot_db/
 
-# Dados de exemplo
-data/sample/
+# OS
+.DS_Store
+Thumbs.db
+
+# Backup / temp
+backups/
+*.bak
+*.tmp
 
 # Logs
 *.log
-
-# Config local
-config/settings_local.yaml
-
-# Virtual env
-venv/
-.venv/
+pipeline_log.txt

@@ -2,14 +2,15 @@ import getpass
 from pathlib import Path
 
 import qtawesome as qta
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Signal
+from src.localization import _
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Signal, QSize
 from PySide6.QtGui import QFont, QPainter, QColor, QBrush, QPen, QLinearGradient, QPixmap
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QPushButton, QLabel, QFrame, QFileDialog
 )
 
 _PAGINAS = [
-    ("dashboard", "fa5s.home", "Dashboard"),
+    ("dashboard", "fa5s.home", _("Dashboard")),
     ("importar", "fa5s.file-import", "Importar"),
     ("ajustar", "fa5s.sync-alt", "Ajustar"),
     ("exportar", "fa5s.file-export", "Exportar"),
@@ -62,7 +63,7 @@ class LogoTarget(QWidget):
         self._load_saved()
 
     def _load_saved(self):
-        cfg_path = Path.home() / "planilha_bi_db" / "company_logo.txt"
+        cfg_path = Path.home() / "sheetpilot_db" / "company_logo.txt"
         try:
             if cfg_path.exists():
                 path = cfg_path.read_text(encoding="utf-8").strip()
@@ -72,7 +73,7 @@ class LogoTarget(QWidget):
             pass
 
     def _save_path(self, path: str):
-        cfg_path = Path.home() / "planilha_bi_db" / "company_logo.txt"
+        cfg_path = Path.home() / "sheetpilot_db" / "company_logo.txt"
         try:
             cfg_path.parent.mkdir(parents=True, exist_ok=True)
             cfg_path.write_text(path, encoding="utf-8")
@@ -151,20 +152,14 @@ class SidebarButton(QPushButton):
         icon = self._icon_active if self._active else self._icon
         if self._expanded:
             self.setIcon(icon)
-            self.setIconSize(self._icon_size(1.2))
-            self.setText(f"  {self._text}")
+            self.setIconSize(QSize(20, 20))
+            self.setText(f" {self._text}")
         else:
             self.setIcon(icon)
-            self.setIconSize(self._icon_size(1.4))
+            self.setIconSize(QSize(22, 22))
             self.setText("")
         self.setFont(QFont("Segoe UI", 11))
         self._apply_style()
-
-    def _icon_size(self, scale):
-        base = 20
-        sz = int(base * scale)
-        from PySide6.QtCore import QSize
-        return QSize(sz, sz)
 
     def set_expanded(self, expanded: bool):
         self._expanded = expanded
@@ -212,8 +207,8 @@ class SidebarButton(QPushButton):
 class Sidebar(QWidget):
     page_changed = Signal(str)
 
-    EXPANDED_WIDTH = 220
-    COLLAPSED_WIDTH = 64
+    EXPANDED_WIDTH = 200
+    COLLAPSED_WIDTH = 56
     ANIM_DURATION = 280
 
     def __init__(self, parent=None):
@@ -233,10 +228,10 @@ class Sidebar(QWidget):
         # Toggle — starts expanded → show X
         t_btn = QPushButton()
         t_btn.setIcon(qta.icon("fa5s.times", color="#90CAF9"))
-        t_btn.setIconSize(self._isize(1.2))
+        t_btn.setIconSize(QSize(20, 20))
         t_btn.setFixedHeight(40)
         t_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        t_btn.setToolTip("Recolher menu")
+        t_btn.setToolTip(_("Recolher menu"))
         t_btn.setStyleSheet("""
             QPushButton {
                 background-color: transparent; border: none; border-radius: 8px;
@@ -292,14 +287,10 @@ class Sidebar(QWidget):
         self.version_label.setAlignment(Qt.AlignCenter)
         self.version_label.setFont(QFont("Segoe UI", 9))
         self.version_label.setStyleSheet("color: #455A64; border: none;")
-        self.version_label.setToolTip("Planilha BI Pilot")
+        self.version_label.setToolTip("SheetPilot")
         av_layout.addWidget(self.version_label)
 
         layout.addWidget(self.avatar_frame)
-
-    def _isize(self, scale=1.2):
-        from PySide6.QtCore import QSize
-        return QSize(int(20 * scale), int(20 * scale))
 
     def update_theme_colors(self, is_dark: bool):
         bg = "#161b2e" if is_dark else "#f0f2f5"
@@ -342,7 +333,7 @@ class Sidebar(QWidget):
             "fa5s.times" if self._expanded else "fa5s.bars", color="#90CAF9"
         ))
         self._toggle_btn.setToolTip(
-            "Recolher menu" if self._expanded else "Expandir menu"
+            _("Recolher menu") if self._expanded else _("Expandir menu")
         )
 
         visible = self._expanded

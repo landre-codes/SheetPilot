@@ -1,0 +1,43 @@
+{
+    "__language__": "English",
+    "__author__": "SheetPilot",
+
+    "SheetPilot": "SheetPilot",
+    "Smart spreadsheet correction & normalization": "Smart spreadsheet correction & normalization",
+    "Dashboard": "Dashboard",
+    "Importar": "Import",
+    "Transformar": "Transform",
+    "Exportar": "Export",
+    "Configurações": "Settings",
+    "Histórico da sessão": "Session History",
+    "Nenhuma divergência detectada": "No changes detected",
+
+    "Importar planilhas": "Import spreadsheets",
+    "Ajustar tabelas invertidas": "Fix inverted tables",
+    "Exportar planilhas corrigidas": "Export corrected sheets",
+
+    "Comece importando suas planilhas": "Start by importing your spreadsheets",
+    "Importadas! Agora ajuste as tabelas invertidas": "Imported! Now fix the inverted tables",
+    "Dados ajustados. Exporte as planilhas corrigidas ou reimporte se houver novidades": "Data adjusted. Export or re-import if there's new data",
+
+    "Arquivos": "Files",
+    "Planilhas": "Sheets",
+    "Linhas lidas": "Lines read",
+    "Backup": "Backup",
+    "Último backup": "Last backup",
+    "Nenhum backup encontrado": "No backup found",
+    "Executar Backup": "Run Backup",
+    "Clique em 'Analisar' para ver o que pode ser otimizado": "Click 'Analyze' to see what can be optimized",
+    "Analisar": "Analyze",
+    "Limpar e Otimizar": "Clean & Optimize",
+    "Restaurar": "Restore",
+    "Alternar menu": "Toggle menu",
+    "Recolher menu": "Collapse menu",
+    "Expandir menu": "Expand menu",
+    "Minimizar": "Minimize",
+    "Maximizar": "Maximize",
+    "Fechar": "Close",
+    "Planilhas disponíveis para exportação": "Available sheets for export",
+    "Exportar Todas": "Export All",
+    "Formato de saída": "Output format"
+}

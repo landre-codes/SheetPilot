@@ -1,9 +1,14 @@
 import ctypes
+import os
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
+# High-DPI support — before QApplication
+os.environ.setdefault("QT_ENABLE_HIGHDPI_SCALING", "1")
+os.environ.setdefault("QT_SCALE_FACTOR_ROUNDING_POLICY", "PassThrough")
+
+from PySide6.QtCore import Qt, QRect
+from PySide6.QtGui import QFont, QScreen
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QStackedWidget, QStatusBar, QLabel
@@ -19,7 +24,7 @@ from src.gui.widgets.sidebar import Sidebar
 from src.gui.widgets.titlebar import TitleBar
 from src.storage.database import Database
 
-DEFAULT_DB_DIR = Path.home() / "planilha_bi_db"
+DEFAULT_DB_DIR = Path.home() / "sheetpilot_db"
 DEFAULT_DB_PATH = str(DEFAULT_DB_DIR / "pilot.db")
 
 # Win32 constants for native shadow
@@ -35,9 +40,19 @@ class MainWindow(QMainWindow):
         self._maximized = False
         self._pages = {}
 
-        self.setWindowTitle("Planilha BI Pilot")
-        self.setMinimumSize(1024, 680)
-        self.resize(1280, 800)
+        self.setWindowTitle("SheetPilot")
+        # Use screen-aware sizing: 80% of available screen
+        screen = QApplication.primaryScreen()
+        if screen:
+            geo = screen.availableGeometry()
+            w, h = int(geo.width() * 0.82), int(geo.height() * 0.85)
+            self.setMinimumSize(1000, 700)
+            self.resize(w, h)
+            # Center on screen
+            self.move((geo.width() - w) // 2, (geo.height() - h) // 2)
+        else:
+            self.setMinimumSize(1200, 780)
+            self.resize(1400, 900)
 
         self._setup_frameless()
         self._setup_ui()
@@ -199,7 +214,7 @@ class MainWindow(QMainWindow):
                 page.refresh()
             title_map = {
                 "dashboard": "Dashboard", "importar": "Importar",
-                "ajustar": "Ajustar", "exportar": "Exportar",
+                "transformar": "Transformar", "exportar": "Exportar",
                 "settings": "Configurações"
             }
             self.title_bar.set_page_title(title_map.get(page_id, ""))

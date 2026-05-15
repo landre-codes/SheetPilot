@@ -1,0 +1,33 @@
+{
+    "__language__": "Português (Brasil)",
+    "__author__": "SheetPilot",
+
+    "SheetPilot": "SheetPilot",
+    "Smart spreadsheet correction & normalization": "Correção e normalização inteligente de planilhas",
+    "Dashboard": "Dashboard",
+    "Import": "Importar",
+    "Transform": "Transformar",
+    "Export": "Exportar",
+    "Settings": "Configurações",
+    "Session History": "Histórico da sessão",
+    "No divergences detected": "Nenhuma divergência detectada",
+
+    "Import spreadsheets": "Importar planilhas",
+    "Adjust inverted tables": "Ajustar tabelas invertidas",
+    "Export corrected spreadsheets": "Exportar planilhas corrigidas",
+
+    "Start by importing your spreadsheets": "Comece importando suas planilhas",
+    "Imported! Now adjust the inverted tables": "Importadas! Agora ajuste as tabelas invertidas",
+    "Adjusted. Export corrected sheets or re-import if there is news": "Ajustados. Exporte as planilhas corrigidas ou reimporte se houver novidades",
+
+    "Files": "Arquivos",
+    "Sheets": "Planilhas",
+    "Lines read": "Linhas lidas",
+    "Backup": "Backup",
+    "Last backup": "Último backup",
+    "No backup found": "Nenhum backup encontrado",
+    "Run backup": "Executar Backup",
+    "Click 'Analyze' to see what can be optimized": "Clique em 'Analisar' para ver o que pode ser otimizado",
+    "Analyze": "Analisar",
+    "Clean & Optimize": "Limpar e Otimizar"
+}

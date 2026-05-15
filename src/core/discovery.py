@@ -142,7 +142,7 @@ class DiscoveryEngine:
     def scan_recursivo(self, diretorio: str):
         path = Path(diretorio)
         print(f"\n[discovery] escaneando: {diretorio}")
-        xlsx_files = list(path.rglob("*.xlsx")) + list(path.rglob("*.xls"))
+        xlsx_files = list(path.rglob("*.xlsx")) + list(path.rglob("*.xlsb")) + list(path.rglob("*.xlsm")) + list(path.rglob("*.csv")) + list(path.rglob("*.parquet"))
         print(f"  encontrados {len(xlsx_files)} arquivos")
 
         for f in xlsx_files:

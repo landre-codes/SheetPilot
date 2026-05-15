@@ -67,7 +67,7 @@ class ScanWorker(BaseWorker):
             self.progress.emit(100, "Scan concluido")
 
         elif path.is_dir():
-            ext_order = ["*.xlsx", "*.xlsb", "*.csv", "*.parquet"]
+            ext_order = ["*.xlsx", "*.xlsb", "*.xlsm", "*.csv", "*.parquet"]
             todos = []
             for ext in ext_order:
                 todos.extend(path.rglob(ext))
@@ -105,7 +105,7 @@ class IngestWorker(BaseWorker):
             self.progress.emit(100, "Ingestao concluida")
 
         elif path.is_dir():
-            ext_order = ["*.xlsx", "*.xlsb", "*.csv", "*.parquet"]
+            ext_order = ["*.xlsx", "*.xlsb", "*.xlsm", "*.csv", "*.parquet"]
             todos = []
             for ext in ext_order:
                 todos.extend(path.rglob(ext))
@@ -139,7 +139,7 @@ class BothWorker(BaseWorker):
         ingest = IngestionEngine(db)
         path = Path(self.caminho)
 
-        ext_order = ["*.xlsx", "*.xlsb", "*.csv", "*.parquet"]
+        ext_order = ["*.xlsx", "*.xlsb", "*.xlsm", "*.csv", "*.parquet"]
         todos = []
         for ext in ext_order:
             if path.is_dir():
@@ -211,7 +211,7 @@ class FullPipelineWorker(BaseWorker):
         transform = TransformEngine(db)
 
         path = Path(self.caminho)
-        ext_order = ["*.xlsx", "*.xlsb", "*.csv", "*.parquet"]
+        ext_order = ["*.xlsx", "*.xlsb", "*.xlsm", "*.csv", "*.parquet"]
         todos = []
         for ext in ext_order:
             if path.is_dir():
