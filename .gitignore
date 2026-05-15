@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Database local
+*.db
+*.db-journal
+*.db-wal
+
+# Dados de exemplo
+data/sample/
+
+# Logs
+*.log
+
+# Config local
+config/settings_local.yaml
+
+# Virtual env
+venv/
+.venv/

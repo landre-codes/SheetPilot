@@ -1,0 +1,27 @@
+# Configuracao global do Planilha BI Pilot
+database:
+  path: data/pilot.db
+  migrations_dir: migrations
+
+scan:
+  extensoes:
+    - .xlsx
+    - .xlsb
+    - .csv
+    - .parquet
+  excluir_padroes: [ "~$", ".tmp" ]
+  # Detectar múltiplas tabelas na mesma sheet (separadas por linhas em branco)
+  detectar_tabelas: true
+  # Mínimo de linhas (incluindo cabeçalho) para considerar um grupo como tabela
+  min_linhas_tabela: 3
+
+transform:
+  coluna_data_regex: "^\\d{4}-\\d{2}$"   # regex para detectar colunas que sao datas
+  batch_size: 1000
+
+mapeamentos:
+# Example mapping for a specific schema_hash
+# - schema_hash: "abc123..."
+#   tabela_destino: "vendas"
+#   coluna_cliente: "Cliente"
+#   coluna_data_regex: "^\\d{4}$"
