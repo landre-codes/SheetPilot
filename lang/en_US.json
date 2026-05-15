@@ -1,7 +1,6 @@
 {
     "__language__": "English",
     "__author__": "SheetPilot",
-
     "SheetPilot": "SheetPilot",
     "Smart spreadsheet correction & normalization": "Smart spreadsheet correction & normalization",
     "Dashboard": "Dashboard",
@@ -11,15 +10,12 @@
     "Configurações": "Settings",
     "Histórico da sessão": "Session History",
     "Nenhuma divergência detectada": "No changes detected",
-
     "Importar planilhas": "Import spreadsheets",
     "Ajustar tabelas invertidas": "Fix inverted tables",
     "Exportar planilhas corrigidas": "Export corrected sheets",
-
     "Comece importando suas planilhas": "Start by importing your spreadsheets",
     "Importadas! Agora ajuste as tabelas invertidas": "Imported! Now fix the inverted tables",
     "Dados ajustados. Exporte as planilhas corrigidas ou reimporte se houver novidades": "Data adjusted. Export or re-import if there's new data",
-
     "Arquivos": "Files",
     "Planilhas": "Sheets",
     "Linhas lidas": "Lines read",
@@ -39,5 +35,17 @@
     "Fechar": "Close",
     "Planilhas disponíveis para exportação": "Available sheets for export",
     "Exportar Todas": "Export All",
-    "Formato de saída": "Output format"
+    "Formato de saída": "Output format",
+    "Aviso": "Warning",
+    "Erro": "Error",
+    "Informação": "Information",
+    "Sucesso": "Success",
+    "Operação em andamento.": "Operation in progress.",
+    "Selecione ou cole um caminho primeiro.": "Select or paste a path first.",
+    "Selecione uma planilha na lista.": "Select a sheet from the list.",
+    "Selecione um backup na lista.": "Select a backup from the list.",
+    "Nenhum dado para exportar.": "No data to export.",
+    "Restaurado. Reinicie.": "Restored. Restart.",
+    "Falha ao restaurar.": "Failed to restore.",
+    "Nenhuma planilha para exportar.": "No sheets to export."
 }

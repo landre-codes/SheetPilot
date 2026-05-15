@@ -160,7 +160,7 @@ class BasePage(QWidget):
 
     def _exec_worker(self, worker):
         if self._worker and self._worker.isRunning():
-            QMessageBox.warning(self, "Aviso", "Operação em andamento.")
+            QMessageBox.warning(self, _("Aviso"), _("Operação em andamento."))
             return
         self._worker = worker
         self._worker.log.connect(self._on_log)
@@ -173,7 +173,7 @@ class BasePage(QWidget):
     def _on_progress(self, value, text): pass
     def _on_finished(self, ok): pass
     def _on_error(self, msg):
-        QMessageBox.critical(self, "Erro", msg)
+        QMessageBox.critical(self, _("Erro"), msg)
 
 
 # ─────────────────────────────────────────────
@@ -635,10 +635,10 @@ class ImportPage(BasePage):
     def _run_import(self):
         path = self.path_edit.text().strip()
         if not path:
-            QMessageBox.warning(self, "Aviso", "Selecione ou cole um caminho primeiro.")
+            QMessageBox.warning(self, _("Aviso"), _("Selecione ou cole um caminho primeiro."))
             return
         if not Path(path).exists():
-            QMessageBox.critical(self, "Erro", f"Caminho inválido: {path}")
+            QMessageBox.critical(self, _("Erro"), f"Caminho inválido: {path}")
             return
         _save_recent(path)
         self._refresh_recent()
@@ -681,7 +681,7 @@ class ImportPage(BasePage):
         self.log.append(f"\n❌ {msg}")
         self.lock_controls(False)
         registrar_operacao("importar", f"Erro na importação", "erro")
-        QMessageBox.critical(self, "Erro", msg)
+        QMessageBox.critical(self, _("Erro"), msg)
 
 
 # ── Recent paths helpers ─────────────────────
@@ -774,16 +774,16 @@ class TransformPage(BasePage):
     def _run_one(self):
         item = self.schema_list.currentItem()
         if not item:
-            QMessageBox.warning(self, "Aviso", "Selecione uma planilha na lista.")
+            QMessageBox.warning(self, _("Aviso"), _("Selecione uma planilha na lista."))
             return
         hid = item.data(Qt.UserRole)
         self.lock_controls(True)
-        QMessageBox.information(self, "Informação", f"Transformando schema {hid[:12]}...")
+        QMessageBox.information(self, _("Informação"), f"Transformando schema {hid[:12]}...")
         self._exec_worker(TransformWorker(self._db_path(), hid))
 
     def _run_all(self):
         self.lock_controls(True)
-        QMessageBox.information(self, "Informação", "Transformando todas as planilhas...")
+        QMessageBox.information(self, _("Informação"), "Transformando todas as planilhas...")
         self._exec_worker(TransformWorker(self._db_path()))
 
     def lock_controls(self, locked: bool):
@@ -1150,7 +1150,7 @@ class ExportPage(BasePage):
             try:
                 dest.mkdir(parents=True, exist_ok=True)
             except Exception as e:
-                QMessageBox.critical(self, "Erro", f"Não foi possível criar: {dest}")
+                QMessageBox.critical(self, _("Erro"), f"Não foi possível criar: {dest}")
                 return
 
         fmt = self._fmt_key()
@@ -1159,7 +1159,7 @@ class ExportPage(BasePage):
         arquivos = c.execute(_ARQUIVOS_SQL).fetchall()
 
         if not arquivos:
-            QMessageBox.information(self, "Informação", "Nenhum dado para exportar.")
+            QMessageBox.information(self, _("Informação"), _("Nenhum dado para exportar."))
             return
 
         self.log.append(f"\nExportando no formato {fmt.upper()}...")
@@ -1371,7 +1371,7 @@ class ExportPage(BasePage):
         self.log.append(f"\n✖ {msg}")
         self.lock_controls(False)
         registrar_operacao("exportar", "Erro na exportação", "erro")
-        QMessageBox.critical(self, "Erro", msg)
+        QMessageBox.critical(self, _("Erro"), msg)
 
 
 # ─────────────────────────────────────────────
@@ -1529,7 +1529,7 @@ class SettingsPage(BasePage):
     def _restore(self):
         item = self.bk_list.currentItem()
         if not item:
-            QMessageBox.warning(self, "Aviso", "Selecione um backup na lista.")
+            QMessageBox.warning(self, _("Aviso"), _("Selecione um backup na lista."))
             return
         path = item.data(Qt.UserRole)
         confirm = QMessageBox.question(self, _("Restaurar"),
@@ -1538,9 +1538,9 @@ class SettingsPage(BasePage):
         if confirm == QMessageBox.Yes:
             bm = BackupManager(self._db_path())
             if bm.restaurar_backup(path):
-                QMessageBox.information(self, "Sucesso", "Restaurado. Reinicie.")
+                QMessageBox.information(self, _("Sucesso"), _("Restaurado. Reinicie."))
             else:
-                QMessageBox.critical(self, "Erro", "Falha ao restaurar.")
+                QMessageBox.critical(self, _("Erro"), _("Falha ao restaurar."))
 
     def _analyze_db(self):
         try:
@@ -1585,8 +1585,8 @@ class SettingsPage(BasePage):
             ]
             self.cleanup_info.setText("\n".join(lines))
             self.cleanup_info.setStyleSheet("color: #81C784; font-size: 12px; font-weight: bold;")
-            QMessageBox.information(self, "Sucesso", f"Limpeza concluída! {stats['economia_kb']} KB recuperados.")
+            QMessageBox.information(self, _("Sucesso"), f"Limpeza concluída! {stats['economia_kb']} KB recuperados.")
             registrar_operacao("limpeza", f"Limpeza: {stats['economia_kb']} KB recuperados", "ok")
         except Exception as e:
             self.cleanup_info.setText(f"Erro: {e}")
-            QMessageBox.critical(self, "Erro", str(e))
+            QMessageBox.critical(self, _("Erro"), str(e))
