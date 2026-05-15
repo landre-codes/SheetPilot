@@ -1015,14 +1015,26 @@ class ExportPage(BasePage):
 
     @staticmethod
     def _formatar_data_col(nome: str) -> str:
-        """Converte '2025-01' para 'jan/25', mantém outros nomes."""
+        """Converte datas em colunas para formato brasileiro 'jan/25'."""
         import re
-        m = re.match(r"(\d{4})-(\d{2})$", nome)
+        meses = ["", "jan", "fev", "mar", "abr", "mai", "jun",
+                 "jul", "ago", "set", "out", "nov", "dez"]
+        # yyyy-mm-dd ou yyyy-mm
+        m = re.match(r"(\d{4})-(\d{2})", nome)
         if m:
-            ano, mes = m.groups()
-            meses = ["", "jan", "fev", "mar", "abr", "mai", "jun",
-                     "jul", "ago", "set", "out", "nov", "dez"]
-            return f"{meses[int(mes)]}/{ano[2:]}"
+            return f"{meses[int(m.group(2))]}/{m.group(1)[2:]}"
+        # dd/mm/yyyy  
+        m = re.match(r"(\d{2})/(\d{2})/(\d{4})", nome)
+        if m:
+            return f"{meses[int(m.group(2))]}/{m.group(3)[2:]}"
+        # dd/mm
+        m = re.match(r"(\d{2})/(\d{2})$", nome)
+        if m:
+            return f"{meses[int(m.group(2))]}/{m.group(1)}"
+        # mm/yyyy
+        m = re.match(r"(\d{2})/(\d{4})$", nome)
+        if m:
+            return f"{meses[int(m.group(1))]}/{m.group(2)[2:]}"
         return nome
 
     def _build_corrected(self, valores: list) -> tuple:
@@ -1039,7 +1051,7 @@ class ExportPage(BasePage):
         colunas_entidade = []
         colunas_data_raw = []
         for col in col_set:
-            if re.match(r"\d{4}-\d{2}$", col):
+            if re.match(r"^(\d{2}/\d{2}/\d{4})|(\d{2}/\d{2})|(\d{2}/\d{4})|(\d{4}-\d{2}(-\d{2})?)$", col):
                 colunas_data_raw.append(col)
             else:
                 colunas_entidade.append(col)

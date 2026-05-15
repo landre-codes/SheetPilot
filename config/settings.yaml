@@ -17,7 +17,8 @@ scan:
   min_linhas_tabela: 3
 
 transform:
-  coluna_data_regex: "^\\d{4}-\\d{2}$"   # regex para detectar colunas que sao datas
+  coluna_data_regex: "^(\\d{2}/\\d{2}/\\d{4})|(\\d{2}/\\d{2})|(\\d{2}/\\d{4})|(\\d{4}-\\d{2}(-\\d{2})?)$"
+  # regex: dd/mm/aaaa, dd/mm, mm/aaaa, aaaa-mm, aaaa-mm-dd
   batch_size: 1000
 
 mapeamentos:

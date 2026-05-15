@@ -11,7 +11,7 @@ class TransformEngine:
         self.db = db
         self.raw_repo = RawRepo(db)
 
-    def unpivot_para_star_schema(self, schema_hash: str, coluna_data_regex: str = r"^\d{4}-\d{2}$"):
+    def unpivot_para_star_schema(self, schema_hash: str, coluna_data_regex: str = r"^(\d{2}/\d{2}/\d{4})|(\d{2}/\d{2})|(\d{2}/\d{4})|(\d{4}-\d{2}(-\d{2})?)$"):
         """Transforma raw_data (formato largo com datas como colunas) em star schema."""
         print(f"  [transform] unpivot schema_hash={schema_hash[:8]}")
 

@@ -28,7 +28,7 @@ class MapeamentoConfig(BaseModel):
     schema_hash: str
     descricao: str = ""
     coluna_cliente: Optional[str] = None
-    coluna_data_regex: str = r"^\d{4}-\d{2}$"  # regex para detectar colunas-data
+    coluna_data_regex: str = r"^(\d{2}/\d{2}/\d{4})|(\d{2}/\d{2})|(\d{2}/\d{4})|(\d{4}-\d{2}(-\d{2})?)$"  # regex para detectar colunas-data
     colunas_ignorar: list[str] = Field(default_factory=list)
     tabela_destino: str = "generic"
     mapeamento_extra: dict[str, str] = Field(default_factory=dict)
