@@ -982,8 +982,19 @@ EXPORT_DIR_DEFAULT = str(Path.home() / "sheetpilot_db" / "exports")
 
 class ExportPage(BasePage):
     def _build_ui(self):
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        inner = QWidget()
+        layout = QVBoxLayout(inner)
         layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(8)
+        scroll.setWidget(inner)
+        outer.addWidget(scroll)
 
         title = QLabel(_("Export Data"))
         title.setStyleSheet("font-size: 22px; font-weight: bold; color: #E0E0E0;")
@@ -991,6 +1002,7 @@ class ExportPage(BasePage):
 
         sub = QLabel(_("One corrected sheet per original file. No internal codes, dates dd/mm/yyyy."))
         sub.setStyleSheet("color: #78909C; font-size: 12px; margin-bottom: 16px;")
+        sub.setWordWrap(True)
         layout.addWidget(sub)
 
         out_row, self.out_edit, self.out_btn = self._path_input(EXPORT_DIR_DEFAULT, "fa5s.folder-open")
@@ -1035,6 +1047,7 @@ class ExportPage(BasePage):
 
         self.lbl_sheets = QLabel(_("Loading sheets..."))
         self.lbl_sheets.setStyleSheet("color: #607D8B; font-size: 12px; margin-top: 6px;")
+        self.lbl_sheets.setWordWrap(True)
         fmtl.addWidget(self.lbl_sheets)
         layout.addWidget(fmt_card)
 
@@ -1217,8 +1230,18 @@ EXPORT_DIR_DEFAULT = str(Path.home() / "sheetpilot_db" / "exports")
 # ─────────────────────────────────────────────
 class SettingsPage(BasePage):
     def _build_ui(self):
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        inner = QWidget()
+        layout = QVBoxLayout(inner)
         layout.setContentsMargins(24, 24, 24, 24)
+        scroll.setWidget(inner)
+        outer.addWidget(scroll)
 
         title = QLabel(_("Settings"))
         title.setStyleSheet("font-size: 22px; font-weight: bold; color: #E0E0E0;")
