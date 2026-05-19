@@ -990,6 +990,7 @@ class ExportPage(BasePage):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         inner = QWidget()
+        inner.setStyleSheet("background-color: #0d1117;")
         layout = QVBoxLayout(inner)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(8)
@@ -1238,6 +1239,7 @@ class SettingsPage(BasePage):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         inner = QWidget()
+        inner.setStyleSheet("background-color: #0d1117;")
         layout = QVBoxLayout(inner)
         layout.setContentsMargins(24, 24, 24, 24)
         scroll.setWidget(inner)
@@ -1251,7 +1253,8 @@ class SettingsPage(BasePage):
         # Database info
         grp_db = QGroupBox(_("Database"))
         grp_db.setStyleSheet("""
-            QGroupBox { color: #90CAF9; font-size: 13px; font-weight: bold;
+            QGroupBox { background-color: #1a1a2e; color: #90CAF9;
+                        font-size: 13px; font-weight: bold;
                         border: 1px solid #2a2a4e; border-radius: 8px;
                         margin-top: 12px; padding: 16px; }
         """)
@@ -1278,7 +1281,8 @@ class SettingsPage(BasePage):
         # Language
         grp_lang = QGroupBox(_("Language"))
         grp_lang.setStyleSheet("""
-            QGroupBox { color: #90CAF9; font-size: 13px; font-weight: bold;
+            QGroupBox { background-color: #1a1a2e; color: #90CAF9;
+                        font-size: 13px; font-weight: bold;
                         border: 1px solid #2a2a4e; border-radius: 8px;
                         margin-top: 12px; padding: 16px; }
         """)
@@ -1331,7 +1335,8 @@ class SettingsPage(BasePage):
         # Maintenance
         grp_mnt = QGroupBox(_("Maintenance & Cleanup"))
         grp_mnt.setStyleSheet("""
-            QGroupBox { color: #90CAF9; font-size: 13px; font-weight: bold;
+            QGroupBox { background-color: #1a1a2e; color: #90CAF9;
+                        font-size: 13px; font-weight: bold;
                         border: 1px solid #2a2a4e; border-radius: 8px;
                         margin-top: 12px; padding: 16px; }
         """)
@@ -1356,7 +1361,8 @@ class SettingsPage(BasePage):
         # Export config
         grp_exp = QGroupBox(_("Default Export"))
         grp_exp.setStyleSheet("""
-            QGroupBox { color: #90CAF9; font-size: 13px; font-weight: bold;
+            QGroupBox { background-color: #1a1a2e; color: #90CAF9;
+                        font-size: 13px; font-weight: bold;
                         border: 1px solid #2a2a4e; border-radius: 8px;
                         margin-top: 12px; padding: 16px; }
         """)
