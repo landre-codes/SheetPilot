@@ -1021,7 +1021,7 @@ class ExportPage(BasePage):
         fmtl = QVBoxLayout(fmt_card)
         fl1 = QHBoxLayout()
         lbl_fmt = QLabel(_("Output format"))
-        lbl_fmt.setStyleSheet("color: #90CAF9; font-size: 13px; font-weight: bold;")
+        lbl_fmt.setStyleSheet("color: #90CAF9; font-size: 13px; font-weight: bold; background: transparent;")
         fl1.addWidget(lbl_fmt)
         fl1.addStretch()
         fmtl.addLayout(fl1)
@@ -1047,7 +1047,7 @@ class ExportPage(BasePage):
         fmtl.addWidget(self.fmt_combo)
 
         self.lbl_sheets = QLabel(_("Loading sheets..."))
-        self.lbl_sheets.setStyleSheet("color: #607D8B; font-size: 12px; margin-top: 6px;")
+        self.lbl_sheets.setStyleSheet("color: #607D8B; font-size: 12px; margin-top: 6px; background: transparent;")
         self.lbl_sheets.setWordWrap(True)
         fmtl.addWidget(self.lbl_sheets)
         layout.addWidget(fmt_card)
@@ -1260,7 +1260,7 @@ class SettingsPage(BasePage):
         """)
         dbl = QVBoxLayout(grp_db)
         dbp = QLabel(f"{_('Path')}: {self.db.db_path}")
-        dbp.setStyleSheet("color: #B0BEC5; font-size: 12px;")
+        dbp.setStyleSheet("color: #B0BEC5; font-size: 12px; background: transparent;")
         dbp.setWordWrap(True)
         dbp.setToolTip(_("SQLite database file location"))
         dbl.addWidget(dbp)
@@ -1270,7 +1270,7 @@ class SettingsPage(BasePage):
             sz = f"{Path(self.db.db_path).stat().st_size / 1024:.1f} KB"
         except OSError:
             pass
-        dbl.addWidget(QLabel(f"{_('Size')}: {sz}", styleSheet="color: #B0BEC5; font-size: 12px;"))
+        dbl.addWidget(QLabel(f"{_('Size')}: {sz}", styleSheet="color: #B0BEC5; font-size: 12px; background: transparent;"))
 
         btn_bkup = _mkbtn(_("  Manage Backups"), "fa5s.archive", "#F57F17", "#F9A825")
         btn_bkup.setToolTip(_("List, restore or delete backups"))
@@ -1342,7 +1342,7 @@ class SettingsPage(BasePage):
         """)
         mntl = QVBoxLayout(grp_mnt)
         self.cleanup_info = QLabel(_("Click 'Analyze' to see what can be optimized"))
-        self.cleanup_info.setStyleSheet("color: #B0BEC5; font-size: 12px;")
+        self.cleanup_info.setStyleSheet("color: #B0BEC5; font-size: 12px; background: transparent;")
         self.cleanup_info.setWordWrap(True)
         mntl.addWidget(self.cleanup_info)
         mnt_actions = QHBoxLayout()
@@ -1374,7 +1374,7 @@ class SettingsPage(BasePage):
                         color: #c9d1d9; font-size: 12px; }
         """)
         self.exp_path_edit.setToolTip(_("Default export folder"))
-        expl.addWidget(QLabel(_("Export folder:"), styleSheet="color: #B0BEC5; font-size: 12px;"))
+        expl.addWidget(QLabel(_("Export folder:"), styleSheet="color: #B0BEC5; font-size: 12px; background: transparent;"))
         expl.addWidget(self.exp_path_edit)
         layout.addWidget(grp_exp)
 
@@ -1437,14 +1437,14 @@ class SettingsPage(BasePage):
             if raw > 0 or dup > 0:
                 lines.append(_("Cleanup recommended."))
                 self.cleanup_info.setText("\n".join(lines))
-                self.cleanup_info.setStyleSheet("color: #FFB74D; font-size: 12px;")
+                self.cleanup_info.setStyleSheet("color: #FFB74D; font-size: 12px; background: transparent;")
             else:
                 lines.append(_("Database healthy."))
                 self.cleanup_info.setText("\n".join(lines))
-                self.cleanup_info.setStyleSheet("color: #81C784; font-size: 12px;")
+                self.cleanup_info.setStyleSheet("color: #81C784; font-size: 12px; background: transparent;")
         except Exception as e:
             self.cleanup_info.setText(_("Error: {e}").format(e=e))
-            self.cleanup_info.setStyleSheet("color: #EF5350; font-size: 12px;")
+            self.cleanup_info.setStyleSheet("color: #EF5350; font-size: 12px; background: transparent;")
 
     def _run_cleanup(self):
         confirm = QMessageBox.question(self, _("Cleanup"),
@@ -1464,7 +1464,7 @@ class SettingsPage(BasePage):
                 _("Saved: {n} KB").format(n=stats['economia_kb']),
             ]
             self.cleanup_info.setText("\n".join(lines))
-            self.cleanup_info.setStyleSheet("color: #81C784; font-size: 12px; font-weight: bold;")
+            self.cleanup_info.setStyleSheet("color: #81C784; font-size: 12px; font-weight: bold; background: transparent;")
             QMessageBox.information(self, _("Success"),
                                     _("Cleanup complete! {n} KB recovered.").format(n=stats['economia_kb']))
             registrar_operacao("limpeza", _("Cleanup: {n} KB recovered").format(n=stats['economia_kb']), "ok")
