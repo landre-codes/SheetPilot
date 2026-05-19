@@ -1,8 +1,9 @@
 import qtawesome as qta
-from src.localization import _
 from PySide6.QtCore import Qt, Signal, QPoint, QSize
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton
+
+from src.localization import _, on_language_change
 
 
 class TitleBar(QWidget):
@@ -23,6 +24,7 @@ class TitleBar(QWidget):
                 border-bottom: 1px solid #30363d;
             }
         """)
+        on_language_change(lambda: self.retranslate_ui())
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 0, 8, 0)
@@ -45,17 +47,17 @@ class TitleBar(QWidget):
         layout.addStretch()
 
         self.btn_min = QPushButton()
-        self._style_btn(self.btn_min, "fa5s.window-minimize", _("Minimizar"))
+        self._style_btn(self.btn_min, "fa5s.window-minimize", _("Minimize"))
         self.btn_min.clicked.connect(lambda: self.window_action.emit(self.MINIMIZE))
         layout.addWidget(self.btn_min)
 
         self.btn_max = QPushButton()
-        self._style_btn(self.btn_max, "fa5s.window-maximize", _("Maximizar"))
+        self._style_btn(self.btn_max, "fa5s.window-maximize", _("Maximize"))
         self.btn_max.clicked.connect(lambda: self.window_action.emit(self.MAXIMIZE))
         layout.addWidget(self.btn_max)
 
         self.btn_close = QPushButton()
-        self._style_btn(self.btn_close, "fa5s.times", _("Fechar"), close=True)
+        self._style_btn(self.btn_close, "fa5s.times", _("Close"), close=True)
         self.btn_close.clicked.connect(lambda: self.window_action.emit(self.CLOSE))
         layout.addWidget(self.btn_close)
 
@@ -79,6 +81,11 @@ class TitleBar(QWidget):
                 QPushButton:hover { background-color: #F44336; }
             """
         btn.setStyleSheet(base)
+
+    def retranslate_ui(self):
+        self.btn_min.setToolTip(_("Minimize"))
+        self.btn_max.setToolTip(_("Maximize"))
+        self.btn_close.setToolTip(_("Close"))
 
     def set_page_title(self, title: str):
         self.page_label.setText(f"|  {title}")

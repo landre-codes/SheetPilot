@@ -17,8 +17,12 @@ scan:
   min_linhas_tabela: 3
 
 transform:
-  coluna_data_regex: "^(\\d{2}/\\d{2}/\\d{4})|(\\d{2}/\\d{2})|(\\d{2}/\\d{4})|(\\d{4}-\\d{2}(-\\d{2})?)$"
-  # regex: dd/mm/aaaa, dd/mm, mm/aaaa, aaaa-mm, aaaa-mm-dd
+  # Regex para deteccao de colunas-data (dd/mm/aaaa prioritario)
+  # Aceita: dd/mm/aaaa, dd-mm-aaaa, mm/aaaa, mm-aaaa, aaaa-mm-dd, aaaa-mm, aaaa
+  coluna_data_regex: "^(?:\\d{2}[/-]\\d{2}[/-]\\d{4}|\\d{2}[/-]\\d{4}|\\d{4}[/-]\\d{2}(?:[/-]\\d{2})?|\\d{4})$"
+  # Validacao por amostras: % minimo de valores que devem ser datas
+  sample_validation_threshold: 0.7
+  sample_min_values: 5
   batch_size: 1000
 
 mapeamentos:

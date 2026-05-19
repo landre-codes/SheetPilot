@@ -1,42 +1,53 @@
 import json
-from pathlib import Path
-from datetime import datetime
 from dataclasses import dataclass, asdict
+from datetime import datetime
+from pathlib import Path
 
+import qtawesome as qta
+from PySide6.QtCore import Qt, QSize, QStringListModel
+from PySide6.QtGui import QFont, QColor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QLineEdit, QFileDialog, QTextEdit, QTreeWidget, QTreeWidgetItem,
-    QGroupBox, QGridLayout, QProgressBar, QMessageBox, QCheckBox,
-    QListWidget, QListWidgetItem, QFrame, QSizePolicy, QComboBox,
-    QScrollArea, QCompleter
+    QLineEdit, QFileDialog, QTextEdit, QGroupBox,
+    QProgressBar, QMessageBox, QListWidget, QListWidgetItem,
+    QFrame, QComboBox, QScrollArea, QCompleter,
 )
-from PySide6.QtCore import Qt, Signal, QSize, QStringListModel
-from PySide6.QtGui import QFont, QColor
-import qtawesome as qta
-from src.localization import _
 
+from src.localization import _, on_language_change
+from src.log_setup import get_logger
+
+logger = get_logger(__name__)
+
+from src.core.export import (
+    ARQUIVOS_SQL, VALORES_SQL,
+    build_corrected, build_raw_table,
+    stack_side_by_side, arquivo_id_para_raw,
+    export_xlsx, export_xlsb, export_csv, export_parquet,
+)
 from src.gui.workers import (
-    ScanWorker, IngestWorker, BothWorker,
-    TransformWorker, FullPipelineWorker
-)
+    BothWorker,
+    ExportWorker,
+    TransformWorker, )
 from src.gui.backup import BackupManager, DatabaseCleanup
-
 
 # ── Histórico de operações da sessão ─────────
 _LOG_FILE = Path.home() / "sheetpilot_db" / "historico.json"
 
+
 @dataclass
 class Operacao:
-    tipo: str       # "importar", "ajustar", "exportar", "backup", "limpeza"
+    tipo: str  # "importar", "ajustar", "exportar", "backup", "limpeza"
     descricao: str
-    status: str     # "ok", "erro"
+    status: str  # "ok", "erro"
     timestamp: str = ""
 
     def __post_init__(self):
         if not self.timestamp:
             self.timestamp = datetime.now().strftime("%d/%m/%Y %H:%M")
 
+
 _historico_sessao: list[Operacao] = []
+
 
 def _carregar_historico() -> list[Operacao]:
     try:
@@ -47,6 +58,7 @@ def _carregar_historico() -> list[Operacao]:
         pass
     return []
 
+
 def _salvar_historico():
     try:
         _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -56,6 +68,7 @@ def _salvar_historico():
         )
     except Exception:
         pass
+
 
 def registrar_operacao(tipo: str, descricao: str, status: str = "ok"):
     op = Operacao(tipo, descricao, status)
@@ -92,9 +105,14 @@ class BasePage(QWidget):
         self.page_title = page_title
         self._worker = None
         self._build_ui()
+        on_language_change(lambda: self.retranslate_ui())
 
     def _build_ui(self):
         raise NotImplementedError
+
+    def retranslate_ui(self):
+        """Atualiza textos após mudança de idioma. Sobrescrever nas subclasses."""
+        pass
 
     def _log_area(self):
         log = QTextEdit()
@@ -160,7 +178,7 @@ class BasePage(QWidget):
 
     def _exec_worker(self, worker):
         if self._worker and self._worker.isRunning():
-            QMessageBox.warning(self, _("Aviso"), _("Operação em andamento."))
+            QMessageBox.warning(self, _("Warning"), _("Operation in progress."))
             return
         self._worker = worker
         self._worker.log.connect(self._on_log)
@@ -169,11 +187,17 @@ class BasePage(QWidget):
         self._worker.erro.connect(self._on_error)
         self._worker.start()
 
-    def _on_log(self, text): pass
-    def _on_progress(self, value, text): pass
-    def _on_finished(self, ok): pass
+    def _on_log(self, text):
+        pass
+
+    def _on_progress(self, value, text):
+        pass
+
+    def _on_finished(self, ok):
+        pass
+
     def _on_error(self, msg):
-        QMessageBox.critical(self, _("Erro"), msg)
+        QMessageBox.critical(self, _("Error"), msg)
 
 
 # ─────────────────────────────────────────────
@@ -186,6 +210,7 @@ _ICONES_TIPO = {
     "backup": ("fa5s.archive", "#FFA726"),
     "limpeza": ("fa5s.broom", "#EF5350"),
 }
+
 
 class DashboardPage(BasePage):
     def _build_ui(self):
@@ -230,10 +255,10 @@ class DashboardPage(BasePage):
         self.ns_icon = QLabel()
         self.ns_icon.setPixmap(qta.icon("fa5s.lightbulb", color="#FFD54F").pixmap(18, 18))
         nsl.addWidget(self.ns_icon)
-        self.ns_label = QLabel("Carregando...")
+        self.ns_label = QLabel(_("Loading sheets..."))
         self.ns_label.setStyleSheet("color: #B0BEC5; font-size: 12px; background: transparent;")
         nsl.addWidget(self.ns_label, stretch=1)
-        self.ns_btn = QPushButton("Ir")
+        self.ns_btn = QPushButton(_("Go"))
         self.ns_btn.setFixedSize(50, 26)
         self.ns_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.ns_btn.setStyleSheet("""
@@ -251,13 +276,13 @@ class DashboardPage(BasePage):
         # Quick action cards
         acoes = QHBoxLayout()
         acoes.setSpacing(8)
-        tip_import = _("Importar planilhas")
-        tip_ajustar = _("Ajustar tabelas invertidas")
-        tip_export = _("Exportar planilhas corrigidas")
+        tip_import = _("Import spreadsheets")
+        tip_ajustar = _("Adjust inverted tables")
+        tip_export = _("Export corrected spreadsheets")
         for texto, icone, cor, dica, pagina in [
-            (_("Importar"), "fa5s.file-import", "#1976D2", tip_import, "importar"),
-            (_("Ajustar"), "fa5s.sync-alt", "#7B1FA2", tip_ajustar, "transformar"),
-            (_("Exportar"), "fa5s.file-export", "#388E3C", tip_export, "exportar"),
+            (_("Import"), "fa5s.file-import", "#1976D2", tip_import, "importar"),
+            (_("Adjust"), "fa5s.sync-alt", "#7B1FA2", tip_ajustar, "transformar"),
+            (_("Export"), "fa5s.file-export", "#388E3C", tip_export, "exportar"),
         ]:
             card = QFrame()
             card.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -293,9 +318,9 @@ class DashboardPage(BasePage):
         status_grid = QHBoxLayout()
         status_grid.setSpacing(10)
         for chave, rotulo, icone, cor in [
-            ("arquivos", _("Arquivos"), "fa5s.file-excel", "#2196F3"),
-            ("sheets", _("Planilhas"), "fa5s.table", "#4CAF50"),
-            ("raw_data", _("Linhas lidas"), "fa5s.database", "#FF9800"),
+            ("arquivos", _("Files"), "fa5s.file-excel", "#2196F3"),
+            ("sheets", _("Sheets"), "fa5s.table", "#4CAF50"),
+            ("raw_data", _("Lines read"), "fa5s.database", "#FF9800"),
         ]:
             f = QFrame()
             f.setStyleSheet(f"""
@@ -333,10 +358,10 @@ class DashboardPage(BasePage):
                      border-radius: 10px; padding: 12px; margin-top: 4px; }
         """)
         bkl = QHBoxLayout(bk)
-        self.bk_info = QLabel("Backup: verificando...")
+        self.bk_info = QLabel(_("Backup: checking..."))
         self.bk_info.setStyleSheet("color: #B0BEC5; font-size: 12px;")
         bkl.addWidget(self.bk_info, stretch=1)
-        bkb = _mkbtn("  Backup", "fa5s.archive", "#F57F17", "#F9A825")
+        bkb = _mkbtn(_("  Backup"), "fa5s.archive", "#F57F17", "#F9A825")
         bkb.setMinimumHeight(32)
         bkb.clicked.connect(self._run_backup)
         bkl.addWidget(bkb)
@@ -354,14 +379,14 @@ class DashboardPage(BasePage):
         self.div_icon = QLabel()
         self.div_icon.setPixmap(qta.icon("fa5s.exclamation-triangle", color="#FFA726").pixmap(14, 14))
         divl.addWidget(self.div_icon)
-        self.div_label = QLabel(_("Nenhuma divergência detectada"))
+        self.div_label = QLabel(_("No changes detected"))
         self.div_label.setStyleSheet("color: #607D8B; font-size: 11px; background: transparent;")
         divl.addWidget(self.div_label, stretch=1)
         self.div_frame.hide()
         layout.addWidget(self.div_frame)
 
         # Session history
-        hist_title = QLabel(_("Histórico da sessão"))
+        hist_title = QLabel(_("Session History"))
         hist_title.setStyleSheet("color: #90CAF9; font-size: 13px; font-weight: bold;")
         layout.addWidget(hist_title)
         self.hist_list = QListWidget()
@@ -401,11 +426,11 @@ class DashboardPage(BasePage):
         ultimo = bm.ultimo_backup()
         precisa = bm.precisa_backup()
         if ultimo:
-            txt = f"Último backup: {ultimo.strftime('%d/%m/%Y %H:%M')}"
-            txt += "  (OK)" if not precisa else "  (atrasado)"
+            txt = _("Last backup: {date}").format(date=ultimo.strftime('%d/%m/%Y %H:%M'))
+            txt += _("  (OK)") if not precisa else _("  (overdue)")
             self.bk_info.setText(txt)
         else:
-            self.bk_info.setText(_("Nenhum backup encontrado"))
+            self.bk_info.setText(_("No backup found"))
 
     def _atualizar_historico(self):
         self.hist_list.clear()
@@ -443,17 +468,17 @@ class DashboardPage(BasePage):
         n_fact = c.execute("SELECT COUNT(*) as t FROM fact_dados").fetchone()["t"]
 
         if n_arquivos == 0:
-            msg = "Comece importando suas planilhas"
+            msg = _("Start by importing your spreadsheets")
             ico = "fa5s.arrow-right"
             cor_ico = "#FFD54F"
             pagina = "importar"
         elif n_fact == 0:
-            msg = "Importadas. Agora ajuste as tabelas invertidas"
+            msg = _("Imported! Now adjust the inverted tables")
             ico = "fa5s.sync-alt"
             cor_ico = "#AB47BC"
             pagina = "transformar"
         else:
-            msg = "Dados ajustados. Exporte as planilhas corrigidas ou reimporte se houver novidades"
+            msg = _("Data adjusted. Export or re-import if there's new data")
             ico = "fa5s.file-export"
             cor_ico = "#66BB6A"
             pagina = "exportar"
@@ -465,13 +490,12 @@ class DashboardPage(BasePage):
 
         # Divergências
         divs = c.execute("""
-            SELECT a.nome_arquivo, sa.colunas_adicionadas, sa.colunas_removidas, sa.detectado_em
-            FROM schema_audit sa
-            JOIN sheets s ON sa.sheet_id = s.id
-            JOIN arquivos a ON s.arquivo_id = a.id
-            ORDER BY sa.detectado_em DESC
-            LIMIT 3
-        """).fetchall()
+                         SELECT a.nome_arquivo, sa.colunas_adicionadas, sa.colunas_removidas, sa.detectado_em
+                         FROM schema_audit sa
+                                  JOIN sheets s ON sa.sheet_id = s.id
+                                  JOIN arquivos a ON s.arquivo_id = a.id
+                         ORDER BY sa.detectado_em DESC LIMIT 3
+                         """).fetchall()
         if divs:
             txts = []
             for d in divs:
@@ -481,13 +505,26 @@ class DashboardPage(BasePage):
             self.div_label.setText(" | ".join(txts))
             self.div_frame.show()
         else:
-            self.div_label.setText(_("Nenhuma divergência detectada"))
+            self.div_label.setText(_("No changes detected"))
             self.div_frame.hide()
 
         self._atualizar_backup()
         self._atualizar_historico()
 
-    def _on_log(self, text): pass
+    def retranslate_ui(self):
+        self.ns_label.setText(_("Loading sheets..."))
+        tip_import = _("Import spreadsheets")
+        tip_ajustar = _("Adjust inverted tables")
+        tip_export = _("Export corrected spreadsheets")
+        self._update_card_tooltips(tip_import, tip_ajustar, tip_export)
+        self.div_label.setText(_("No changes detected"))
+        self.refresh()
+
+    def _update_card_tooltips(self, tip_import, tip_ajustar, tip_export):
+        pass  # cards stored in local vars in _build_ui — refresh handles texts
+
+    def _on_log(self, text):
+        pass
 
 
 # ─────────────────────────────────────────────
@@ -498,40 +535,44 @@ class ImportPage(BasePage):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
 
-        title = QLabel("Importar Planilhas")
+        title = QLabel(_("Import Spreadsheets"))
         title.setStyleSheet("font-size: 22px; font-weight: bold; color: #E0E0E0;")
         layout.addWidget(title)
 
-        sub = QLabel("Arraste uma pasta aqui ou clique em Selecionar. O sistema lê automaticamente.")
+        sub = QLabel(_("Drag a folder here or click to select. The system reads automatically."))
         sub.setStyleSheet("color: #78909C; font-size: 12px; margin-bottom: 8px;")
         layout.addWidget(sub)
 
-        # Drop zone
-        self.drop_label = QLabel("  Solte sua pasta de planilhas aqui  ")
+        self.drop_label = QLabel()
         self.drop_label.setAlignment(Qt.AlignCenter)
-        self.drop_label.setFixedHeight(60)
+        self.drop_label.setFixedHeight(72)
+        self.drop_label.setText(_("Drop your spreadsheet folder here\n  or click to select"))
         self.drop_label.setStyleSheet("""
             QLabel {
                 border: 2px dashed #30363d; border-radius: 12px;
-                color: #546E7A; font-size: 13px; background-color: rgba(255,255,255,0.02);
+                color: #546E7A; font-size: 13px;
+                background-color: rgba(255,255,255,0.02);
+                padding: 12px;
             }
-            QLabel:hover { border-color: #42A5F5; color: #42A5F5;
-                           background-color: rgba(66,165,245,0.05); }
+            QLabel:hover {
+                border-color: #42A5F5; color: #42A5F5;
+                background-color: rgba(66,165,245,0.05);
+            }
         """)
         self.drop_label.setAcceptDrops(True)
         self.drop_label.mousePressEvent = lambda e: self._browse()
         self.drop_label.dragEnterEvent = lambda e: self._on_drag(e)
         self.drop_label.dragLeaveEvent = lambda e: self._on_drag_leave(e)
         self.drop_label.dropEvent = lambda e: self._on_drop(e)
-        self.drop_label.setToolTip("Clique para selecionar ou arraste uma pasta de planilhas")
+        self.drop_label.setToolTip(_("Click to select or drag a spreadsheet folder"))
         layout.addWidget(self.drop_label)
 
         path_row, self.path_edit, self.btn_browse = self._path_input(
-            "C:\\caminho\\para\\planilhas", "fa5s.folder-open"
+            _("C:\\\\path\\\\to\\\\spreadsheets"), "fa5s.folder-open"
         )
-        self.path_edit.setToolTip("Caminho da pasta. Use o seletor ou cole o caminho manualmente")
+        self.path_edit.setToolTip(_("Folder path. Use the selector or paste the path manually."))
         self.path_edit.textChanged.connect(self._on_path_typed)
-        self.btn_browse.setToolTip("Selecionar pasta com planilhas")
+        self.btn_browse.setToolTip(_("Select spreadsheet folder"))
         self.btn_browse.clicked.connect(self._browse)
 
         self._recent_model = QStringListModel()
@@ -544,14 +585,14 @@ class ImportPage(BasePage):
 
         layout.addLayout(path_row)
 
-        fmt_info = QLabel("Formatos: .xlsx  ›  .xlsb  ›  .xlsm  ›  .csv  ›  .parquet")
+        fmt_info = QLabel(_("Formats: .xlsx  .xlsb  .xlsm  .csv  .parquet"))
         fmt_info.setStyleSheet("color: #546E7A; font-size: 11px; margin-bottom: 12px;")
         layout.addWidget(fmt_info)
 
         # Step indicators
         steps = QHBoxLayout()
         self._step_labels = []
-        for ico, txt in [("fa5s.search", "Escaneando..."), ("fa5s.download", "Ingerindo...")]:
+        for ico, txt in [("fa5s.search", _("Scanning...")), ("fa5s.download", _("Ingesting..."))]:
             f = QFrame()
             f.setStyleSheet("""
                 QFrame { background-color: #1a1a2e; border: 1px solid #2a2a4e;
@@ -569,8 +610,8 @@ class ImportPage(BasePage):
             self._step_labels.append((ic, lb, f))
         layout.addLayout(steps)
 
-        self.btn_import = _mkbtn("  Importar", "fa5s.play", "#1565C0", "#1976D2")
-        self.btn_import.setToolTip("Inicia a importação: scan + ingest automáticos")
+        self.btn_import = _mkbtn(_("  Import"), "fa5s.play", "#1565C0", "#1976D2")
+        self.btn_import.setToolTip(_("Start import: automatic scan + ingest"))
         self.btn_import.setMinimumHeight(48)
         self.btn_import.clicked.connect(self._run_import)
         layout.addWidget(self.btn_import)
@@ -586,35 +627,52 @@ class ImportPage(BasePage):
             event.acceptProposedAction()
             self.drop_label.setStyleSheet("""
                 QLabel {
-                    border: 2px dashed #42A5F5; border-radius: 12px;
-                    color: #42A5F5; background-color: rgba(66,165,245,0.08);
+                    border: 3px dashed #4CAF50; border-radius: 12px;
+                    color: #4CAF50; font-weight: bold;
+                    background-color: rgba(76,175,80,0.10);
+                    padding: 12px;
                 }
             """)
+            self.drop_label.setText(_("Drop here! Auto Scan + Ingest"))
 
     def _on_drag_leave(self, _):
         self.drop_label.setStyleSheet("""
             QLabel {
                 border: 2px dashed #30363d; border-radius: 12px;
-                color: #546E7A; background-color: rgba(255,255,255,0.02);
+                color: #546E7A; font-size: 13px;
+                background-color: rgba(255,255,255,0.02);
+                padding: 12px;
             }
-            QLabel:hover { border-color: #42A5F5; color: #42A5F5;
-                           background-color: rgba(66,165,245,0.05); }
+            QLabel:hover {
+                border-color: #42A5F5; color: #42A5F5;
+                background-color: rgba(66,165,245,0.05);
+            }
         """)
+        self.drop_label.setText(_("Drop your spreadsheet folder here\n  or click to select"))
 
     def _on_drop(self, event):
         self._on_drag_leave(None)
+        accepted = False
         for url in event.mimeData().urls():
             path = url.toLocalFile()
             p = Path(path)
             if p.is_dir():
                 self.path_edit.setText(str(p.absolute()))
+                accepted = True
             elif p.suffix.lower() in (".xlsx", ".xlsb", ".xlsm", ".csv", ".parquet"):
                 self.path_edit.setText(str(p.parent.absolute()))
+                accepted = True
             break
-
-    def _refresh_recent(self):
-        paths = _load_recent()
-        self._recent_model.setStringList(paths)
+        if accepted:
+            self.drop_label.setStyleSheet("""
+                QLabel {
+                    border: 2px dashed #4CAF50; border-radius: 12px;
+                    color: #4CAF50; background-color: rgba(76,175,80,0.06);
+                    padding: 12px;
+                }
+                QLabel:hover { border-color: #66BB6A; color: #66BB6A; }
+            """)
+            self.drop_label.setText(_("Path selected!"))
 
     def _on_path_typed(self, text):
         if text and Path(text).exists():
@@ -622,23 +680,29 @@ class ImportPage(BasePage):
                 QLabel {
                     border: 2px dashed #4CAF50; border-radius: 12px;
                     color: #4CAF50; background-color: rgba(76,175,80,0.05);
+                    padding: 12px;
                 }
             """)
+            self.drop_label.setText(_("Valid path"))
         else:
             self._on_drag_leave(None)
 
+    def _refresh_recent(self):
+        paths = _load_recent()
+        self._recent_model.setStringList(paths)
+
     def _browse(self):
-        path = QFileDialog.getExistingDirectory(self, "Pasta com planilhas")
+        path = QFileDialog.getExistingDirectory(self, _("Spreadsheet folder"))
         if path:
             self.path_edit.setText(path)
 
     def _run_import(self):
         path = self.path_edit.text().strip()
         if not path:
-            QMessageBox.warning(self, _("Aviso"), _("Selecione ou cole um caminho primeiro."))
+            QMessageBox.warning(self, _("Warning"), _("Select or paste a path first."))
             return
         if not Path(path).exists():
-            QMessageBox.critical(self, _("Erro"), f"Caminho inválido: {path}")
+            QMessageBox.critical(self, _("Error"), _("Caminho inválido: {path}").format(path=path))
             return
         _save_recent(path)
         self._refresh_recent()
@@ -660,13 +724,26 @@ class ImportPage(BasePage):
         self.btn_browse.setEnabled(not locked)
         self.path_edit.setReadOnly(locked)
 
-    def _on_log(self, text): self.log.append(text)
+    def retranslate_ui(self):
+        self.drop_label.setText(_("Drop your spreadsheet folder here\n  or click to select"))
+        self.btn_import.setText(_("  Import"))
+        for (ico, lb, frm), txt in zip(self._step_labels,
+                                        [_("Scanning..."), _("Ingesting...")]):
+            lb.setText(txt)
+
+    def _on_log(self, text):
+        self.log.append(text)
 
     def _on_progress(self, value, text):
         self.progress.setValue(value)
-        self.progress.setFormat(f"{value}%")
-        if value > 0: self._marcar_passo(0, True)
-        if value >= 100: self._marcar_passo(1, True)
+        if text:
+            self.progress.setFormat(f"{value}% — {text}")
+        else:
+            self.progress.setFormat(f"{value}%")
+        if value > 0:
+            self._marcar_passo(0, True)
+        if value >= 100:
+            self._marcar_passo(1, True)
 
     def _on_finished(self, ok):
         self.progress.setValue(100 if ok else 0)
@@ -675,24 +752,34 @@ class ImportPage(BasePage):
             self._marcar_passo(1, True)
             self.log.append("\n✅ Importação concluída!")
             registrar_operacao("importar", "Importação concluída", "ok")
+            # Invalidar cache da pagina de transformacao
+            parent = self.parent()
+            while parent:
+                if hasattr(parent, '_pages') and 'ajustar' in parent._pages:
+                    parent._pages['ajustar'].invalidate_cache()
+                    break
+                parent = parent.parent()
 
     def _on_error(self, msg):
         self.progress.setValue(0)
         self.log.append(f"\n❌ {msg}")
         self.lock_controls(False)
         registrar_operacao("importar", f"Erro na importação", "erro")
-        QMessageBox.critical(self, _("Erro"), msg)
+        QMessageBox.critical(self, _("Error"), msg)
 
 
 # ── Recent paths helpers ─────────────────────
 _RECENT_FILE = Path.home() / "sheetpilot_db" / "recent_paths.json"
 
+
 def _load_recent() -> list[str]:
     try:
         if _RECENT_FILE.exists():
             return json.loads(_RECENT_FILE.read_text(encoding="utf-8")).get("paths", [])
-    except Exception: pass
+    except Exception:
+        pass
     return []
+
 
 def _save_recent(path: str):
     paths = _load_recent()
@@ -703,22 +790,27 @@ def _save_recent(path: str):
     try:
         _RECENT_FILE.parent.mkdir(parents=True, exist_ok=True)
         _RECENT_FILE.write_text(json.dumps({"paths": paths}, indent=2), encoding="utf-8")
-    except Exception: pass
+    except Exception:
+        pass
 
 
 # ─────────────────────────────────────────────
 #  Ajustar
 # ─────────────────────────────────────────────
 class TransformPage(BasePage):
+    def __init__(self, db, page_title="", parent=None):
+        self._schema_cache: list[dict] | None = None
+        super().__init__(db, page_title, parent)
+
     def _build_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
 
-        title = QLabel("Ajustar Dados")
+        title = QLabel(_("Adjust Data"))
         title.setStyleSheet("font-size: 22px; font-weight: bold; color: #E0E0E0;")
         layout.addWidget(title)
 
-        sub = QLabel("Converta planilhas invertidas (datas como colunas) para o formato estrela.")
+        sub = QLabel(_("Convert inverted tables (dates as columns) to star format."))
         sub.setStyleSheet("color: #78909C; font-size: 12px; margin-bottom: 12px;")
         layout.addWidget(sub)
 
@@ -731,16 +823,22 @@ class TransformPage(BasePage):
             QListWidget::item:selected { background-color: #1565C0; }
             QListWidget::item { padding: 6px; }
         """)
-        self.schema_list.setToolTip("Planilhas detectadas. Selecione uma para transformar.")
-        self._populate()
+        self.schema_list.setToolTip(_("Spreadsheets detected. Select one to transform."))
         layout.addWidget(self.schema_list, stretch=1)
 
+        self.empty_label = QLabel()
+        self.empty_label.setAlignment(Qt.AlignCenter)
+        self.empty_label.setStyleSheet("color: #546E7A; font-size: 13px; padding: 24px;")
+        self.empty_label.hide()
+        layout.addWidget(self.empty_label)
+        self._populate()
+
         btn_row = QHBoxLayout()
-        self.btn_one = _mkbtn("  Ajustar Selecionado", "fa5s.sync-alt", "#1565C0", "#1976D2")
-        self.btn_one.setToolTip("Aplica unpivot apenas na planilha selecionada")
+        self.btn_one = _mkbtn(_("Transform Selected"), "fa5s.sync-alt", "#1565C0", "#1976D2")
+        self.btn_one.setToolTip(_("Applies unpivot to the selected sheet only"))
         self.btn_one.clicked.connect(self._run_one)
-        self.btn_all = _mkbtn("  Ajustar Todos", "fa5s.forward", "#2E7D32", "#388E3C")
-        self.btn_all.setToolTip("Aplica unpivot em todas as planilhas")
+        self.btn_all = _mkbtn(_("Transform All"), "fa5s.forward", "#2E7D32", "#388E3C")
+        self.btn_all.setToolTip(_("Applies unpivot to all sheets"))
         self.btn_all.clicked.connect(self._run_all)
         btn_row.addWidget(self.btn_one)
         btn_row.addWidget(self.btn_all)
@@ -754,95 +852,132 @@ class TransformPage(BasePage):
         layout.addWidget(self.log)
 
     def _populate(self):
-        self.schema_list.clear()
+        if self._schema_cache is not None:
+            self._render_cache()
+            return
         try:
+            # Diagnostico
+            total_sheets = self.db.conn.execute(
+                "SELECT COUNT(*) as t FROM sheets"
+            ).fetchone()["t"]
+            total_arquivos = self.db.conn.execute(
+                "SELECT COUNT(*) as t FROM arquivos"
+            ).fetchone()["t"]
+            total_raw = self.db.conn.execute(
+                "SELECT COUNT(*) as t FROM raw_data"
+            ).fetchone()["t"]
+            logger.info(
+                "TransformPage: sheets=%d, arquivos=%d, raw_data=%d",
+                total_sheets, total_arquivos, total_raw
+            )
+
             rows = self.db.conn.execute("""
-                SELECT DISTINCT s.schema_hash, a.nome_arquivo, s.nome_sheet, s.qtd_linhas
-                FROM sheets s JOIN arquivos a ON s.arquivo_id = a.id
-                WHERE s.schema_hash IS NOT NULL
-                ORDER BY s.ultimo_hash_modificado DESC
-            """).fetchall()
-            for r in rows:
-                txt = f"{r['nome_arquivo']}  ›  {r['nome_sheet']}  ({r['qtd_linhas']} linhas)"
-                item = QListWidgetItem(txt)
-                item.setData(Qt.UserRole, r["schema_hash"])
-                item.setToolTip(f"Arquivo: {r['nome_arquivo']}\nPlanilha: {r['nome_sheet']}\nLinhas: {r['qtd_linhas']}")
-                self.schema_list.addItem(item)
+                                        SELECT DISTINCT s.schema_hash, a.nome_arquivo, s.nome_sheet, s.qtd_linhas
+                                        FROM sheets s
+                                                 JOIN arquivos a ON s.arquivo_id = a.id
+                                        WHERE s.schema_hash IS NOT NULL
+                                        ORDER BY s.ultimo_hash_modificado DESC
+                                        """).fetchall()
+            self._schema_cache = [dict(r) for r in rows]
+            self._render_cache()
+            if not rows:
+                logger.info(
+                    "Nenhuma planilha para transformar: sheets=%d, "
+                    "arquivos=%d, raw_data=%d",
+                    total_sheets, total_arquivos, total_raw
+                )
         except Exception as e:
-            self.log.append(f"Erro: {e}")
+            logger.error("Erro ao popular lista de schemas: %s", e)
+
+    def _render_cache(self):
+        self.schema_list.clear()
+        if not self._schema_cache:
+            self.empty_label.setText(_("No sheets to transform."))
+            self.empty_label.show()
+            self.schema_list.hide()
+            return
+        self.empty_label.hide()
+        self.schema_list.show()
+        for r in self._schema_cache:
+            txt = f"{r['nome_arquivo']}  ›  {r['nome_sheet']}  ({r['qtd_linhas']} linhas)"
+            item = QListWidgetItem(txt)
+            item.setData(Qt.UserRole, r["schema_hash"])
+            item.setToolTip(
+                f"Arquivo: {r['nome_arquivo']}\n"
+                f"Planilha: {r['nome_sheet']}\n"
+                f"Linhas: {r['qtd_linhas']}"
+            )
+            self.schema_list.addItem(item)
+
+    def invalidate_cache(self):
+        self._schema_cache = None
 
     def _run_one(self):
         item = self.schema_list.currentItem()
         if not item:
-            QMessageBox.warning(self, _("Aviso"), _("Selecione uma planilha na lista."))
+            QMessageBox.warning(self, _("Warning"), _("Select a sheet from the list."))
             return
         hid = item.data(Qt.UserRole)
         self.lock_controls(True)
-        QMessageBox.information(self, _("Informação"), f"Transformando schema {hid[:12]}...")
         self._exec_worker(TransformWorker(self._db_path(), hid))
 
     def _run_all(self):
+        qnt = self.schema_list.count()
+        if qnt == 0:
+            QMessageBox.information(self, _("Warning"), _("No sheets to transform."))
+            return
+        msg = _("Apply unpivot to all {count} sheet(s)? Already transformed data will be overwritten.").format(
+            count=qnt)
+        confirm = QMessageBox.question(self, _("Confirm"), msg, QMessageBox.Yes | QMessageBox.No)
+        if confirm != QMessageBox.Yes:
+            return
         self.lock_controls(True)
-        QMessageBox.information(self, _("Informação"), "Transformando todas as planilhas...")
         self._exec_worker(TransformWorker(self._db_path()))
+
+    def refresh(self):
+        self.invalidate_cache()
+        self._populate()
 
     def lock_controls(self, locked: bool):
         self.btn_one.setEnabled(not locked)
         self.btn_all.setEnabled(not locked)
         self.schema_list.setEnabled(not locked)
 
-    def _on_log(self, text): self.log.append(text)
+    def retranslate_ui(self):
+        self.btn_one.setText(_("  Transform Selected"))
+        self.btn_all.setText(_("  Transform All"))
+        self.schema_list.setToolTip(_("Select a sheet from the list."))
+
+    def _on_log(self, text):
+        self.log.append(text)
 
     def _on_progress(self, value, text):
         self.progress.setValue(value)
-        self.progress.setFormat(f"{value}%" if text else f"{value}%")
+        self.progress.setFormat(f"{value}%" if not text else f"{value}% — {text}")
 
     def _on_finished(self, ok):
         self.progress.setValue(100 if ok else 0)
         self.lock_controls(False)
+        self.invalidate_cache()
         self._populate()
         if ok:
             self.log.append("\n✅ Transformação concluída!")
             registrar_operacao("ajustar", "Transformação concluída", "ok")
 
+    def _on_log(self, text):
+        self.log.append(text)
 
-# ─────────────────────────────────────────────
-#  Exportar
-# ─────────────────────────────────────────────
+    def _on_progress(self, value, text):
+        self.progress.setValue(value)
+        if text:
+            self.progress.setFormat(f"{value}% — {text}")
+        else:
+            self.progress.setFormat(f"{value}%")
+
+
+# ─── ExportPage ──────────────────────────────
+
 EXPORT_DIR_DEFAULT = str(Path.home() / "sheetpilot_db" / "exports")
-
-# ── Queries para re-pivot (voltar ao formato largo original) ──
-
-_ARQUIVOS_SQL = """
-    SELECT DISTINCT da.id as arq_id, da.nome_arquivo
-    FROM fact_dados f
-    JOIN dim_arquivo da ON f.arquivo_id = da.id
-    ORDER BY da.nome_arquivo
-"""
-
-_SHEETS_POR_ARQUIVO_SQL = """
-    SELECT DISTINCT f.sheet_name
-    FROM fact_dados f
-    WHERE f.arquivo_id = ?
-    ORDER BY f.sheet_name
-"""
-
-_COLUNAS_SQL = """
-    SELECT DISTINCT dc.nome_coluna_original
-    FROM fact_dados f
-    JOIN dim_coluna dc ON f.coluna_id = dc.id
-    WHERE f.arquivo_id = ? AND f.sheet_name = ?
-    ORDER BY dc.nome_coluna_original
-"""
-
-_VALORES_SQL = """
-    SELECT f.linha_origem, dc.nome_coluna_original,
-           COALESCE(f.valor_numerico, f.valor_texto) as valor
-    FROM fact_dados f
-    JOIN dim_coluna dc ON f.coluna_id = dc.id
-    WHERE f.arquivo_id = ? AND f.sheet_name = ?
-    ORDER BY f.linha_origem, dc.nome_coluna_original
-"""
 
 
 class ExportPage(BasePage):
@@ -850,18 +985,18 @@ class ExportPage(BasePage):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
 
-        title = QLabel("Exportar Dados")
+        title = QLabel(_("Export Data"))
         title.setStyleSheet("font-size: 22px; font-weight: bold; color: #E0E0E0;")
         layout.addWidget(title)
 
-        sub = QLabel("Uma planilha corrigida por arquivo original. Sem códigos internos, datas dd/mm/yyyy.")
+        sub = QLabel(_("One corrected sheet per original file. No internal codes, dates dd/mm/yyyy."))
         sub.setStyleSheet("color: #78909C; font-size: 12px; margin-bottom: 16px;")
         layout.addWidget(sub)
 
         out_row, self.out_edit, self.out_btn = self._path_input(EXPORT_DIR_DEFAULT, "fa5s.folder-open")
         self.out_edit.setText(EXPORT_DIR_DEFAULT)
-        self.out_edit.setToolTip("Pasta onde os arquivos serão salvos")
-        self.out_btn.setToolTip("Selecionar pasta de destino")
+        self.out_edit.setToolTip(_("Folder where exported files will be saved"))
+        self.out_btn.setToolTip(_("Select destination folder"))
         self.out_btn.clicked.connect(self._browse_out)
         layout.addLayout(out_row)
 
@@ -872,14 +1007,14 @@ class ExportPage(BasePage):
         """)
         fmtl = QVBoxLayout(fmt_card)
         fl1 = QHBoxLayout()
-        lbl_fmt = QLabel(_("Formato de saída"))
+        lbl_fmt = QLabel(_("Output format"))
         lbl_fmt.setStyleSheet("color: #90CAF9; font-size: 13px; font-weight: bold;")
         fl1.addWidget(lbl_fmt)
         fl1.addStretch()
         fmtl.addLayout(fl1)
 
         self.fmt_combo = QComboBox()
-        self.fmt_combo.addItems(["xlsx  (Excel padrão)", "xlsb  (Excel binário)", "csv  (texto)", "parquet  (colunar)"])
+        self.fmt_combo.addItems([_("xlsx  (Standard Excel)"), _("xlsb  (Binary Excel)"), _("csv  (text)"), _("parquet  (columnar)")])
         self.fmt_combo.setCurrentIndex(0)
         self.fmt_combo.setStyleSheet("""
             QComboBox {
@@ -895,10 +1030,10 @@ class ExportPage(BasePage):
             }
             QComboBox:hover { border-color: #42A5F5; }
         """)
-        self.fmt_combo.setToolTip("xlsx = Excel padrão  |  xlsb = Excel binário  |  csv = texto  |  parquet = colunar")
+        self.fmt_combo.setToolTip(_("xlsx = Standard Excel  |  xlsb = Binary Excel  |  csv = text  |  parquet = columnar"))
         fmtl.addWidget(self.fmt_combo)
 
-        self.lbl_sheets = QLabel("Carregando planilhas...")
+        self.lbl_sheets = QLabel(_("Loading sheets..."))
         self.lbl_sheets.setStyleSheet("color: #607D8B; font-size: 12px; margin-top: 6px;")
         fmtl.addWidget(self.lbl_sheets)
         layout.addWidget(fmt_card)
@@ -913,11 +1048,11 @@ class ExportPage(BasePage):
             QListWidget::item { padding: 6px 10px; }
             QListWidget::item:selected { background-color: #1565C0; }
         """)
-        self.sheet_list.setToolTip(_("Planilhas disponíveis para exportação"))
+        self.sheet_list.setToolTip(_("Available sheets for export"))
         layout.addWidget(self.sheet_list)
 
-        self.btn_export = _mkbtn("  Exportar Todas", "fa5s.file-export", "#2E7D32", "#388E3C")
-        self.btn_export.setToolTip("Gera um arquivo por planilha original, sem IDs, datas dd/mm/yyyy")
+        self.btn_export = _mkbtn(_("  Export All"), "fa5s.file-export", "#2E7D32", "#388E3C")
+        self.btn_export.setToolTip(_("Generates one file per original sheet, no IDs, dd/mm/yyyy dates"))
         self.btn_export.setMinimumHeight(50)
         self.btn_export.clicked.connect(self._run_export)
         layout.addWidget(self.btn_export)
@@ -931,447 +1066,150 @@ class ExportPage(BasePage):
     def refresh(self):
         self._list_arquivos()
 
-    @staticmethod
-    def _arquivos_id_para_raw(self, c, dim_arq_id: int) -> int | None:
-        """Mapeia dim_arquivo.id → arquivos.id para queries em raw_data."""
-        row = c.execute("SELECT caminho_completo FROM dim_arquivo WHERE id = ?", (dim_arq_id,)).fetchone()
-        if not row:
-            return None
-        try:
-            return int(row["caminho_completo"].replace("db://", ""))
-        except (ValueError, AttributeError):
-            return None
-
     def _list_arquivos(self):
         self.sheet_list.clear()
         try:
             c = self.db.conn.cursor()
-            arquivos = c.execute(_ARQUIVOS_SQL).fetchall()
+            arquivos = c.execute(ARQUIVOS_SQL).fetchall()
             if not arquivos:
-                self.lbl_sheets.setText("Nenhum dado. Importe e transforme primeiro.")
+                self.lbl_sheets.setText(_("No data. Import and transform first."))
                 return
             total_geral = 0
             total_items = 0
             for arq in arquivos:
                 dim_id = arq["arq_id"]
-                _arp = c.execute("SELECT caminho_completo FROM dim_arquivo WHERE id = ?", (dim_id,)).fetchone()
-                orig_id = int(_arp["caminho_completo"].replace("db://", "")) if _arp else None
+                orig_id = arquivo_id_para_raw(c, dim_id)
 
-                # Sheets com dados corrigidos (fact_dados)
-                fact_sheets = c.execute("SELECT DISTINCT sheet_name FROM fact_dados WHERE arquivo_id = ?", (dim_id,)).fetchall()
+                fact_sheets = c.execute(
+                    "SELECT DISTINCT sheet_name FROM fact_dados WHERE arquivo_id = ?",
+                    (dim_id,)
+                ).fetchall()
 
-                # Sheets normais (só raw_data, sem fact_dados) — usa orig_id para raw_data
                 raw_sheets = []
                 if orig_id is not None:
                     raw_sheets = c.execute("""
-                        SELECT DISTINCT s.nome_sheet FROM raw_data rd
-                        JOIN sheets s ON rd.sheet_id = s.id
-                        WHERE rd.arquivo_id = ?
-                        EXCEPT
-                        SELECT DISTINCT f.sheet_name FROM fact_dados f WHERE f.arquivo_id = ?
-                    """, (orig_id, dim_id)).fetchall()
+                                           SELECT DISTINCT s.nome_sheet
+                                           FROM raw_data rd
+                                                    JOIN sheets s ON rd.sheet_id = s.id
+                                           WHERE rd.arquivo_id = ?
+                                           EXCEPT
+                                           SELECT DISTINCT f.sheet_name
+                                           FROM fact_dados f
+                                           WHERE f.arquivo_id = ?
+                                           """, (orig_id, dim_id)).fetchall()
 
                 for s in fact_sheets:
-                    cnt = c.execute("SELECT COUNT(*) as t FROM fact_dados WHERE arquivo_id = ? AND sheet_name = ?",
-                                    (dim_id, s["sheet_name"])).fetchone()
+                    cnt = c.execute(
+                        "SELECT COUNT(*) as t FROM fact_dados WHERE arquivo_id = ? AND sheet_name = ?",
+                        (dim_id, s["sheet_name"]),
+                    ).fetchone()
                     qtd = cnt["t"]
                     total_geral += qtd
                     label = f"{arq['nome_arquivo']}  ›  {s['sheet_name']}  ({qtd} linhas) ✓ corrigida"
                     item = QListWidgetItem(label)
                     item.setData(Qt.UserRole, ("fact", dim_id, s["sheet_name"], arq["nome_arquivo"]))
-                    item.setToolTip("Planilha corrigida (invertida → normalizada)")
+                    item.setToolTip(_("Fixed sheet (inverted -> normalized)"))
                     self.sheet_list.addItem(item)
                     total_items += 1
 
                 for s in raw_sheets:
-                    cnt = c.execute("SELECT COUNT(*) as t FROM raw_data rd WHERE rd.arquivo_id = ? AND rd.sheet_id = (SELECT id FROM sheets WHERE arquivo_id = ? AND nome_sheet = ?)",
-                                    (orig_id, orig_id, s["nome_sheet"])).fetchone()
+                    cnt = c.execute(
+                        "SELECT COUNT(*) as t FROM raw_data rd "
+                        "WHERE rd.arquivo_id = ? AND rd.sheet_id = ("
+                        "  SELECT id FROM sheets WHERE arquivo_id = ? AND nome_sheet = ?"
+                        ")",
+                        (orig_id, orig_id, s["nome_sheet"]),
+                    ).fetchone()
                     qtd = cnt["t"]
                     total_geral += qtd
                     label = f"{arq['nome_arquivo']}  ›  {s['nome_sheet']}  ({qtd} linhas) — original"
                     item = QListWidgetItem(label)
                     item.setData(Qt.UserRole, ("raw", dim_id, s["nome_sheet"], arq["nome_arquivo"], orig_id))
-                    item.setToolTip("Planilha já no formato correto")
+                    item.setToolTip(_("Already in correct format"))
                     self.sheet_list.addItem(item)
                     total_items += 1
 
-            self.lbl_sheets.setText(f"{total_items} planilha(s) · {total_geral} linhas no total")
+            self.lbl_sheets.setText(_("{total_items} sheet(s) · {total_geral} total rows").format(
+                total_items=total_items, total_geral=total_geral))
         except Exception as e:
-            self.lbl_sheets.setText(f"Erro: {e}")
+            self.lbl_sheets.setText(f"Error: {e}")
             import traceback
             self.lbl_sheets.setToolTip(traceback.format_exc())
 
     def _browse_out(self):
-        path = QFileDialog.getExistingDirectory(self, "Pasta de destino")
+        path = QFileDialog.getExistingDirectory(self, _("Destination folder"))
         if path:
             self.out_edit.setText(path)
 
     def _fmt_key(self) -> str:
         raw = self.fmt_combo.currentText()
-        if "xlsx" in raw: return "xlsx"
-        if "xlsb" in raw: return "xlsb"
-        if "csv" in raw: return "csv"
+        if "xlsx" in raw:
+            return "xlsx"
+        if "xlsb" in raw:
+            return "xlsb"
+        if "csv" in raw:
+            return "csv"
         return "parquet"
 
-    @staticmethod
-    def _formatar_data_col(nome: str) -> str:
-        """Converte datas em colunas para formato brasileiro 'jan/25'."""
-        import re
-        meses = ["", "jan", "fev", "mar", "abr", "mai", "jun",
-                 "jul", "ago", "set", "out", "nov", "dez"]
-        # yyyy-mm-dd ou yyyy-mm
-        m = re.match(r"(\d{4})-(\d{2})", nome)
-        if m:
-            return f"{meses[int(m.group(2))]}/{m.group(1)[2:]}"
-        # dd/mm/yyyy  
-        m = re.match(r"(\d{2})/(\d{2})/(\d{4})", nome)
-        if m:
-            return f"{meses[int(m.group(2))]}/{m.group(3)[2:]}"
-        # dd/mm
-        m = re.match(r"(\d{2})/(\d{2})$", nome)
-        if m:
-            return f"{meses[int(m.group(2))]}/{m.group(1)}"
-        # mm/yyyy
-        m = re.match(r"(\d{2})/(\d{4})$", nome)
-        if m:
-            return f"{meses[int(m.group(1))]}/{m.group(2)[2:]}"
-        return nome
-
-    def _build_corrected(self, valores: list) -> tuple:
-        """Constrói o formato corrigido.
-        - Tabelas invertidas (datas como colunas): [entidades, Data, Valor]
-        - Tabelas normais: mantém estrutura original (pass-through)."""
-        from collections import OrderedDict
-        import re
-
-        col_set = OrderedDict()
-        for row in valores:
-            col_set[row["nome_coluna_original"]] = True
-
-        colunas_entidade = []
-        colunas_data_raw = []
-        for col in col_set:
-            if re.match(r"^(\d{2}/\d{2}/\d{4})|(\d{2}/\d{2})|(\d{2}/\d{4})|(\d{4}-\d{2}(-\d{2})?)$", col):
-                colunas_data_raw.append(col)
-            else:
-                colunas_entidade.append(col)
-
-        mapa = {(r["linha_origem"], r["nome_coluna_original"]): r["valor"] for r in valores}
-        todas_linhas = sorted(set(r["linha_origem"] for r in valores))
-
-        if not colunas_data_raw:
-            # Tabela NORMAL: mantém estrutura original
-            cabecalho = colunas_entidade
-            linhas = [cabecalho]
-            for ln in todas_linhas:
-                row = [str(mapa.get((ln, c), "")) for c in colunas_entidade]
-                linhas.append(row)
-            return cabecalho, linhas
-
-        # Tabela INVERTIDA: corrige para [entidades, Data, Valor]
-        cabecalho = colunas_entidade + ["Data", "Valor"]
-        linhas = [cabecalho]
-        for ln in todas_linhas:
-            ent_vals = [str(mapa.get((ln, c), "")) for c in colunas_entidade]
-            for col_data in colunas_data_raw:
-                dt_fmt = ExportPage._formatar_data_col(col_data)
-                val = mapa.get((ln, col_data), "")
-                if val is not None and str(val).strip():
-                    linhas.append(ent_vals + [dt_fmt, str(val)])
-        return cabecalho, linhas
-
-    @staticmethod
-    def _merge_tables_side_by_side(subs: list) -> tuple | None:
-        """Agrupa múltiplas tabelas corrigidas lado a lado, separadas por colunas em branco.
-        Cada tabela mantém sua própria estrutura [entidades, Data, Valor].
-        subs = [(sheet_name, colunas, linhas), ...]
-        Retorna (colunas_combinadas, linhas_combinadas)."""
-        if not subs:
-            return None
-        return ExportPage._stack_side_by_side(subs)
-
-    @staticmethod
-    def _stack_side_by_side(subs: list, colunas_sep: int = 3) -> tuple | None:
-        """Empilha múltiplas tabelas lado a lado com N colunas vazias entre elas."""
-        if not subs:
-            return None
-
-        all_data = []
-        max_data_rows = 0
-        for _, _, linhas in subs:
-            data = linhas[1:] if len(linhas) > 1 else []
-            all_data.append((linhas[0] if linhas else [], data))
-            max_data_rows = max(max_data_rows, len(data))
-
-        combined_cols = []
-        combined_rows = [[] for _ in range(max_data_rows)]
-
-        for idx, (header, data) in enumerate(all_data):
-            if idx > 0:
-                for _ in range(colunas_sep):
-                    combined_cols.append("")
-                    for ri in range(max_data_rows):
-                        combined_rows[ri].append("")
-
-            combined_cols.extend(header)
-            for ri in range(max_data_rows):
-                if ri < len(data):
-                    combined_rows[ri].extend(data[ri])
-                else:
-                    combined_rows[ri].extend([""] * len(header))
-
-        return combined_cols, combined_rows
-
-    def _build_raw_table(self, cursor, raw_arquivo_id: int, sheet_name: str) -> tuple:
-        """Reconstrói tabela original de raw_data para planilhas normais (pass-through).
-        raw_arquivo_id é o id da tabela arquivos (não dim_arquivo)."""
-        import json
-        rows = cursor.execute("""
-            SELECT rd.row_data FROM raw_data rd
-            JOIN sheets s ON rd.sheet_id = s.id
-            WHERE rd.arquivo_id = ? AND s.nome_sheet = ?
-            ORDER BY rd.linha_id
-        """, (raw_arquivo_id, sheet_name)).fetchall()
-        if not rows:
-            return [], []
-        first = json.loads(rows[0]["row_data"])
-        colunas = list(first.keys())
-        data = [colunas]
-        for r in rows:
-            row_data = json.loads(r["row_data"])
-            data.append([str(row_data.get(c, "")) for c in colunas])
-        return colunas, data
-
     def _run_export(self):
-        import json, re
-        from collections import defaultdict
-        dest = Path(self.out_edit.text().strip())
-        if not dest.exists():
+        dest = self.out_edit.text().strip()
+        if not dest:
+            QMessageBox.warning(self, _("Warning"), _("Select a destination folder first."))
+            return
+        if not Path(dest).exists():
             try:
-                dest.mkdir(parents=True, exist_ok=True)
+                Path(dest).mkdir(parents=True, exist_ok=True)
             except Exception as e:
-                QMessageBox.critical(self, _("Erro"), f"Não foi possível criar: {dest}")
+                QMessageBox.critical(self, _("Error"), _("Could not create: {dest}").format(dest=dest))
                 return
 
         fmt = self._fmt_key()
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        c = self.db.conn.cursor()
-        arquivos = c.execute(_ARQUIVOS_SQL).fetchall()
-
-        if not arquivos:
-            QMessageBox.information(self, _("Informação"), _("Nenhum dado para exportar."))
-            return
-
-        self.log.append(f"\nExportando no formato {fmt.upper()}...")
+        self.log.append(_("\nExporting as {fmt}...").format(fmt=fmt.upper()))
         self.lock_controls(True)
         self.progress.setValue(0)
-        exported = 0
-
-        for i, arq in enumerate(arquivos):
-            groups_by_file = []
-            # Mapeia dim_arquivo.id → arquivos.id para raw_data
-            _arp = c.execute("SELECT caminho_completo FROM dim_arquivo WHERE id = ?", (arq["arq_id"],)).fetchone()
-            arq_id_db = int(_arp["caminho_completo"].replace("db://", "")) if _arp else None
-
-            fact_sheets = c.execute("SELECT DISTINCT sheet_name FROM fact_dados WHERE arquivo_id = ?", (arq["arq_id"],)).fetchall()
-
-            # Sheets normais (raw_data) — consulta pelo id original
-            raw_sheets = []
-            if arq_id_db is not None:
-                raw_sheets = c.execute("""
-                    SELECT DISTINCT s.nome_sheet FROM raw_data rd
-                    JOIN sheets s ON rd.sheet_id = s.id
-                    WHERE rd.arquivo_id = ?
-                """, (arq_id_db,)).fetchall()
-
-            fact_names = {s["sheet_name"] for s in fact_sheets}
-
-            # --- Processar sheets corrigidas (fact_dados) ---
-            regulares = {}
-            sub_agrupadas = defaultdict(list)
-            for s in fact_sheets:
-                valores = c.execute(_VALORES_SQL, (arq["arq_id"], s["sheet_name"])).fetchall()
-                if not valores:
-                    continue
-                col, lin = self._build_corrected(valores)
-                if "__T" in s["sheet_name"]:
-                    base = s["sheet_name"].split("__T")[0]
-                    sub_agrupadas[base].append((s["sheet_name"], col, lin))
-                else:
-                    regulares[s["sheet_name"]] = (col, lin)
-
-            for nome, (col, lin) in regulares.items():
-                groups_by_file.append(("fact", nome, col, lin))
-            for base, subs in sub_agrupadas.items():
-                if len(subs) == 1:
-                    _, col, lin = subs[0]
-                    groups_by_file.append(("fact", base, col, lin))
-                else:
-                    merged = ExportPage._stack_side_by_side(subs)
-                    if merged:
-                        groups_by_file.append(("fact", base, merged[0], merged[1]))
-
-            # --- Processar sheets normais (raw_data pass-through) ---
-            for s in raw_sheets:
-                if s["nome_sheet"] in fact_names:
-                    continue  # já processada pelo fact_dados
-                col, lin = self._build_raw_table(c, arq_id_db, s["nome_sheet"])
-                if col:
-                    groups_by_file.append(("raw", s["nome_sheet"], col, lin))
-
-            if not groups_by_file:
-                continue
-
-            name_base = arq["nome_arquivo"].replace(".xlsx", "").replace(".xlsb", "").replace(".xlsm", "").replace(".csv", "").replace(".parquet", "")
-            safe_name = name_base.replace(" ", "_").replace("/", "-")[:40]
-            fname = f"{safe_name}_corrigida_{ts}.{fmt}"
-            fpath = dest / fname
-
-            grupos = [(nome, col, lin) for _, nome, col, lin in groups_by_file]
-
-            try:
-                if fmt == "csv":
-                    for s_name, scol, srows in grupos:
-                        sf = f"{safe_name}_{s_name}_corrigida_{ts}.csv"
-                        sp = dest / sf
-                        self._export_csv_wide(sp, scol, srows)
-                        self.log.append(f"  {sf}  ({sp.stat().st_size/1024:.1f} KB)")
-                        exported += 1
-                elif fmt == "parquet":
-                    for s_name, scol, srows in grupos:
-                        sf = f"{safe_name}_{s_name}_corrigida_{ts}.parquet"
-                        sp = dest / sf
-                        self._export_parquet_wide(sp, scol, srows)
-                        self.log.append(f"  {sf}  ({sp.stat().st_size/1024:.1f} KB)")
-                        exported += 1
-                elif fmt == "xlsb":
-                    ok = self._export_xlsb_wide(fpath, grupos)
-                    if not ok:
-                        fpath = fpath.with_suffix(".xlsx")
-                        self._export_xlsx_wide(fpath, grupos)
-                    sz = fpath.stat().st_size
-                    sz_str = f"{sz/1048576:.1f} MB" if sz > 1048576 else f"{sz/1024:.1f} KB"
-                    self.log.append(f"  {fname}  ({sz_str}, {len(grupos)} aba(s))")
-                    exported += 1
-                else:
-                    self._export_xlsx_wide(fpath, grupos)
-                    sz = fpath.stat().st_size
-                    sz_str = f"{sz/1048576:.1f} MB" if sz > 1048576 else f"{sz/1024:.1f} KB"
-                    self.log.append(f"  {fname}  ({sz_str}, {len(grupos)} aba(s))")
-                    exported += 1
-
-            except Exception as e:
-                self.log.append(f"  ✖ {fname}: {e}")
-                import traceback
-                self.log.append(traceback.format_exc())
-
-            self.progress.setValue(int((i + 1) / len(arquivos) * 100))
-
-        self.progress.setValue(100)
-        self.log.append(f"\n✅ {exported} arquivo(s) gerado(s) em {dest}/")
-        registrar_operacao("exportar", f"{exported} arquivo(s) exportado(s)", "ok")
-
-        try:
-            import subprocess
-            subprocess.Popen(["explorer", str(dest)])
-        except Exception: pass
-
-        self.lock_controls(False)
-
-    # ── Writers: formato largo (colunas + linhas) ─────────────────────
-
-    def _format_xlsx_ws(self, ws, colunas: list[str], linhas: list):
-        """Aplica formatação padronizada + dados a uma planilha."""
-        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-        hf = Font(name="Segoe UI", bold=True, color="FFFFFF", size=11)
-        hfill = PatternFill(start_color="1A237E", end_color="1A237E", fill_type="solid")
-        ha = Alignment(horizontal="center", vertical="center")
-        bdr = Border(left=Side(style="thin"), right=Side(style="thin"),
-                     top=Side(style="thin"), bottom=Side(style="thin"))
-        for ci, col in enumerate(colunas, 1):
-            cell = ws.cell(row=1, column=ci, value=col)
-            cell.font = hf; cell.fill = hfill; cell.alignment = ha; cell.border = bdr
-        ws.freeze_panes = "A2"
-        df = Font(name="Segoe UI", size=10)
-        af = PatternFill(start_color="F5F5F5", end_color="F5F5F5", fill_type="solid")
-        for ri, row in enumerate(linhas[1:], start=2):  # pula cabeçalho
-            for ci, val in enumerate(row, 1):
-                cell = ws.cell(row=ri, column=ci, value=val if val is not None else "")
-                cell.font = df; cell.border = bdr
-                if ri % 2 == 0: cell.fill = af
-        for ci in range(1, len(colunas) + 1):
-            col_val = str(colunas[ci - 1] or "")
-            if col_val.strip() == "":
-                # Coluna separadora: mínimo possível
-                ws.column_dimensions[ws.cell(row=1, column=ci).column_letter].width = 1.5
-            else:
-                ml = len(col_val)
-                for ri in range(2, min(len(linhas), 200)):
-                    v = ws.cell(row=ri, column=ci).value
-                    if v: ml = max(ml, min(len(str(v)), 40))
-                ws.column_dimensions[ws.cell(row=1, column=ci).column_letter].width = ml + 3
-
-    def _export_xlsx_wide(self, path, grupos: list):
-        """grupos = [(nome_aba, colunas, linhas), ...]"""
-        from openpyxl import Workbook
-        wb = Workbook()
-        wb.remove(wb.active)
-        for s_name, colunas, linhas in grupos:
-            ws = wb.create_sheet(title=s_name[:31])
-            self._format_xlsx_ws(ws, colunas, linhas)
-        wb.save(str(path))
-
-    def _export_xlsb_wide(self, path, grupos: list) -> bool:
-        try:
-            import win32com.client as win32
-            excel = win32.gencache.EnsureDispatch("Excel.Application")
-            excel.DisplayAlerts = False
-            wb = excel.Workbooks.Add()
-            while wb.Worksheets.Count > 1:
-                wb.Worksheets(2).Delete()
-            for idx, (s_name, colunas, linhas) in enumerate(grupos):
-                ws = wb.Worksheets(1) if idx == 0 else wb.Worksheets.Add(After=wb.Worksheets(wb.Worksheets.Count))
-                ws.Name = s_name[:31]
-                for j, col in enumerate(colunas, 1):
-                    c = ws.Cells(1, j); c.Value = col; c.Font.Bold = True
-                    c.Interior.Color = 0x1A237E; c.Font.Color = 0xFFFFFF
-                for i, row in enumerate(linhas[1:], 2):
-                    for j, val in enumerate(row, 1):
-                        ws.Cells(i, j).Value = val if val is not None else ""
-                ws.Columns.AutoFit()
-            wb.SaveAs(str(path), FileFormat=50)
-            wb.Close(); excel.Quit()
-            return True
-        except Exception:
-            return False
-
-    def _export_csv_wide(self, path, colunas: list[str], linhas: list):
-        import csv
-        with open(path, "w", newline="", encoding="utf-8-sig") as f:
-            w = csv.writer(f, delimiter=";")
-            for row in linhas:
-                w.writerow([str(v) if v is not None else "" for v in row])
-
-    def _export_parquet_wide(self, path, colunas: list[str], linhas: list):
-        import pyarrow as pa, pyarrow.parquet as pq
-        arrays = {colunas[i]: [] for i in range(len(colunas))}
-        for row in linhas[1:]:
-            for i, c in enumerate(colunas):
-                arrays[c].append(str(row[i]) if row[i] is not None else "")
-        pq.write_table(pa.table(arrays), str(path))
+        self._exec_worker(ExportWorker(self._db_path(), dest, fmt))
 
     def lock_controls(self, locked: bool):
         self.btn_export.setEnabled(not locked)
         self.out_btn.setEnabled(not locked)
         self.out_edit.setReadOnly(locked)
 
-    def _on_log(self, text): self.log.append(text)
-    def _on_progress(self, value, text): self.progress.setValue(value)
+    def retranslate_ui(self):
+        self.btn_export.setText(_("  Export All"))
+        self.fmt_combo.clear()
+        self.fmt_combo.addItems([_("xlsx  (Excel padrão)"), _("xlsb  (Binary Excel)"), _("csv  (text)"), _("parquet  (columnar)")])
+
+    def _on_log(self, text):
+        self.log.append(text)
+
+    def _on_progress(self, value, text):
+        self.progress.setValue(value)
+
+    def _on_finished(self, ok):
+        self.progress.setValue(100 if ok else 0)
+        self.lock_controls(False)
+        if ok:
+            dest = self.out_edit.text().strip()
+            self.log.append(_("\nExport complete!"))
+            registrar_operacao("exportar", "Export completed", "ok")
+            try:
+                import subprocess
+                subprocess.Popen(["explorer", str(dest)])
+            except Exception:
+                pass
+
     def _on_error(self, msg):
+        self.progress.setValue(0)
         self.log.append(f"\n✖ {msg}")
         self.lock_controls(False)
-        registrar_operacao("exportar", "Erro na exportação", "erro")
-        QMessageBox.critical(self, _("Erro"), msg)
+        registrar_operacao("exportar", "Export error", "erro")
+        QMessageBox.critical(self, _("Error"), msg)
+
+
+# ─────────────────────────────────────────────
+#  Exportar
+# ─────────────────────────────────────────────
+EXPORT_DIR_DEFAULT = str(Path.home() / "sheetpilot_db" / "exports")
 
 
 # ─────────────────────────────────────────────
@@ -1382,38 +1220,40 @@ class SettingsPage(BasePage):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
 
-        title = QLabel("Configurações")
+        title = QLabel(_("Settings"))
         title.setStyleSheet("font-size: 22px; font-weight: bold; color: #E0E0E0;")
         layout.addWidget(title)
         layout.addSpacing(12)
 
         # Database info
-        grp_db = QGroupBox("Banco de Dados")
+        grp_db = QGroupBox(_("Database"))
         grp_db.setStyleSheet("""
             QGroupBox { color: #90CAF9; font-size: 13px; font-weight: bold;
                         border: 1px solid #2a2a4e; border-radius: 8px;
                         margin-top: 12px; padding: 16px; }
         """)
         dbl = QVBoxLayout(grp_db)
-        dbp = QLabel(f"Caminho: {self.db.db_path}")
+        dbp = QLabel(f"{_('Path')}: {self.db.db_path}")
         dbp.setStyleSheet("color: #B0BEC5; font-size: 12px;")
         dbp.setWordWrap(True)
-        dbp.setToolTip("Localização do arquivo SQLite")
+        dbp.setToolTip(_("SQLite database file location"))
         dbl.addWidget(dbp)
 
         sz = "?"
-        try: sz = f"{Path(self.db.db_path).stat().st_size / 1024:.1f} KB"
-        except: pass
-        dbl.addWidget(QLabel(f"Tamanho: {sz}", styleSheet="color: #B0BEC5; font-size: 12px;"))
+        try:
+            sz = f"{Path(self.db.db_path).stat().st_size / 1024:.1f} KB"
+        except OSError:
+            pass
+        dbl.addWidget(QLabel(f"{_('Size')}: {sz}", styleSheet="color: #B0BEC5; font-size: 12px;"))
 
-        btn_bkup = _mkbtn("  Gerenciar Backups", "fa5s.archive", "#F57F17", "#F9A825")
-        btn_bkup.setToolTip("Listar, restaurar ou excluir backups")
+        btn_bkup = _mkbtn(_("  Manage Backups"), "fa5s.archive", "#F57F17", "#F9A825")
+        btn_bkup.setToolTip(_("List, restore or delete backups"))
         btn_bkup.clicked.connect(self._show_backups)
         dbl.addWidget(btn_bkup)
         layout.addWidget(grp_db)
 
         # Language
-        grp_lang = QGroupBox("Idioma / Language")
+        grp_lang = QGroupBox(_("Language"))
         grp_lang.setStyleSheet("""
             QGroupBox { color: #90CAF9; font-size: 13px; font-weight: bold;
                         border: 1px solid #2a2a4e; border-radius: 8px;
@@ -1428,9 +1268,16 @@ class SettingsPage(BasePage):
                 padding: 8px 12px; font-size: 12px;
             }
         """)
-        from src.localization import available_languages, set_language
-        for code, name in available_languages():
+        from src.localization import available_languages, current_language
+        self.lang_combo.blockSignals(True)
+        current_code = current_language()
+        selected_idx = 0
+        for i, (code, name) in enumerate(available_languages()):
             self.lang_combo.addItem(f"{name} ({code})", code)
+            if code == current_code:
+                selected_idx = i
+        self.lang_combo.setCurrentIndex(selected_idx)
+        self.lang_combo.blockSignals(False)
         self.lang_combo.currentIndexChanged.connect(self._change_language)
         langl.addWidget(self.lang_combo)
         layout.addWidget(grp_lang)
@@ -1448,10 +1295,10 @@ class SettingsPage(BasePage):
         layout.addWidget(self.bk_list)
 
         bk_actions = QHBoxLayout()
-        btn_restore = _mkbtn("  Restaurar", "fa5s.undo", "#E65100", "#EF6C00")
-        btn_restore.setToolTip("Substitui o banco atual pelo backup selecionado (útil para recuperação)")
+        btn_restore = _mkbtn(_("  Restore"), "fa5s.undo", "#E65100", "#EF6C00")
+        btn_restore.setToolTip(_("Replaces current database with the selected backup (useful for recovery)"))
         btn_restore.clicked.connect(self._restore)
-        lbl_auto = QLabel("Backups antigos (>30 dias) são removidos automaticamente na limpeza.")
+        lbl_auto = QLabel(_("Old backups (>30 days) are removed automatically during cleanup."))
         lbl_auto.setStyleSheet("color: #546E7A; font-size: 11px;")
         bk_actions.addWidget(btn_restore)
         bk_actions.addWidget(lbl_auto)
@@ -1459,23 +1306,23 @@ class SettingsPage(BasePage):
         layout.addLayout(bk_actions)
 
         # Maintenance
-        grp_mnt = QGroupBox("Manutenção e Limpeza")
+        grp_mnt = QGroupBox(_("Maintenance & Cleanup"))
         grp_mnt.setStyleSheet("""
             QGroupBox { color: #90CAF9; font-size: 13px; font-weight: bold;
                         border: 1px solid #2a2a4e; border-radius: 8px;
                         margin-top: 12px; padding: 16px; }
         """)
         mntl = QVBoxLayout(grp_mnt)
-        self.cleanup_info = QLabel("Clique em 'Analisar' para ver o que pode ser otimizado.")
+        self.cleanup_info = QLabel(_("Click 'Analyze' to see what can be optimized"))
         self.cleanup_info.setStyleSheet("color: #B0BEC5; font-size: 12px;")
         self.cleanup_info.setWordWrap(True)
         mntl.addWidget(self.cleanup_info)
         mnt_actions = QHBoxLayout()
-        btn_analyze = _mkbtn("  Analisar", "fa5s.stethoscope", "#546E7A", "#607D8B")
-        btn_analyze.setToolTip("Verifica o banco e mostra quanto espaço pode ser recuperado")
+        btn_analyze = _mkbtn(_("  Analyze"), "fa5s.stethoscope", "#546E7A", "#607D8B")
+        btn_analyze.setToolTip(_("Analyzes the database and shows how much space can be recovered"))
         btn_analyze.clicked.connect(self._analyze_db)
-        btn_clean = _mkbtn("  Limpar e Otimizar", "fa5s.broom", "#2E7D32", "#388E3C")
-        btn_clean.setToolTip("Remove dados órfãos, duplicatas e backups antigos. Executa VACUUM.")
+        btn_clean = _mkbtn(_("  Clean & Optimize"), "fa5s.broom", "#2E7D32", "#388E3C")
+        btn_clean.setToolTip(_("Removes orphan data, duplicates and old backups. Runs VACUUM."))
         btn_clean.clicked.connect(self._run_cleanup)
         mnt_actions.addWidget(btn_analyze)
         mnt_actions.addWidget(btn_clean)
@@ -1484,7 +1331,7 @@ class SettingsPage(BasePage):
         layout.addWidget(grp_mnt)
 
         # Export config
-        grp_exp = QGroupBox("Exportação Padrão")
+        grp_exp = QGroupBox(_("Default Export"))
         grp_exp.setStyleSheet("""
             QGroupBox { color: #90CAF9; font-size: 13px; font-weight: bold;
                         border: 1px solid #2a2a4e; border-radius: 8px;
@@ -1497,8 +1344,8 @@ class SettingsPage(BasePage):
                         border-radius: 6px; background-color: #0d1117;
                         color: #c9d1d9; font-size: 12px; }
         """)
-        self.exp_path_edit.setToolTip("Pasta padrão para exportação de dados")
-        expl.addWidget(QLabel("Pasta de exportação:", styleSheet="color: #B0BEC5; font-size: 12px;"))
+        self.exp_path_edit.setToolTip(_("Default export folder"))
+        expl.addWidget(QLabel(_("Export folder:"), styleSheet="color: #B0BEC5; font-size: 12px;"))
         expl.addWidget(self.exp_path_edit)
         layout.addWidget(grp_exp)
 
@@ -1507,13 +1354,14 @@ class SettingsPage(BasePage):
     def _change_language(self, idx: int):
         code = self.lang_combo.itemData(idx)
         if code:
-            from src.localization import set_language
+            from src.localization import set_language, trigger_refresh
             set_language(code)
-            QMessageBox.information(self, "SheetPilot",
-                "Idioma alterado. Reinicie a aplicação para aplicar.\n\n"
-                "Language changed. Restart the application to apply.")
-            # In a full implementation, you'd trigger UI refresh here
-            # For now, user needs to restart
+            trigger_refresh()
+            QMessageBox.information(self, _("SheetPilot"),
+                                    _("Language changed. Navigate to other pages to see the changes, or restart the application."))
+
+    def retranslate_ui(self):
+        self.cleanup_info.setText(_("Click 'Analyze' to see what can be optimized"))
 
     def _refresh_backups(self):
         self.bk_list.clear()
@@ -1524,69 +1372,73 @@ class SettingsPage(BasePage):
             item.setToolTip(f"Criado: {b['data'][:19]}")
             self.bk_list.addItem(item)
 
-    def _show_backups(self): self._refresh_backups()
+    def _show_backups(self):
+        self._refresh_backups()
 
     def _restore(self):
         item = self.bk_list.currentItem()
         if not item:
-            QMessageBox.warning(self, _("Aviso"), _("Selecione um backup na lista."))
+            QMessageBox.warning(self, _("Warning"), _("Select a backup from the list."))
             return
         path = item.data(Qt.UserRole)
-        confirm = QMessageBox.question(self, _("Restaurar"),
-            "Isso substituirá o banco atual. Continuar?",
-            QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, _("Restore"),
+                                       _("Isso substituirá o banco atual. Continuar?"),
+                                       QMessageBox.Yes | QMessageBox.No)
         if confirm == QMessageBox.Yes:
             bm = BackupManager(self._db_path())
             if bm.restaurar_backup(path):
-                QMessageBox.information(self, _("Sucesso"), _("Restaurado. Reinicie."))
+                QMessageBox.information(self, _("Success"), _("Restored. Restart."))
             else:
-                QMessageBox.critical(self, _("Erro"), _("Falha ao restaurar."))
+                QMessageBox.critical(self, _("Error"), _("Failed to restore."))
 
     def _analyze_db(self):
         try:
             dc = DatabaseCleanup(self._db_path())
             diag = dc.diagnostic()
-            raw = diag["raw_orfao"]; audit = diag["audit_total"]
-            dup = diag["duplicatas"]; size = diag["tamanho_atual_kb"]
+            raw = diag["raw_orfao"];
+            audit = diag["audit_total"]
+            dup = diag["duplicatas"];
+            size = diag["tamanho_atual_kb"]
             lines = [
-                f"Tamanho: {size:.1f} KB",
-                f"Dados brutos órfãos: {raw}",
-                f"Registros de auditoria: {audit}",
-                f"Duplicatas: {dup}",
+                _("Size: {size:.1f} KB").format(size=size),
+                _("Orphaned raw data: {n}").format(n=raw),
+                _("Audit records: {n}").format(n=audit),
+                _("Duplicates: {n}").format(n=dup),
             ]
             if raw > 0 or dup > 0:
-                lines.append("Recomenda-se limpeza.")
+                lines.append(_("Cleanup recommended."))
                 self.cleanup_info.setText("\n".join(lines))
                 self.cleanup_info.setStyleSheet("color: #FFB74D; font-size: 12px;")
             else:
-                lines.append("Banco saudável.")
+                lines.append(_("Database healthy."))
                 self.cleanup_info.setText("\n".join(lines))
                 self.cleanup_info.setStyleSheet("color: #81C784; font-size: 12px;")
         except Exception as e:
-            self.cleanup_info.setText(f"Erro: {e}")
+            self.cleanup_info.setText(_("Error: {e}").format(e=e))
             self.cleanup_info.setStyleSheet("color: #EF5350; font-size: 12px;")
 
     def _run_cleanup(self):
-        confirm = QMessageBox.question(self, "Limpeza",
-            "Remover dados brutos já transformados, duplicatas e backups antigos?",
-            QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, _("Cleanup"),
+                                       _("Remove raw data already transformed, duplicates and old backups?"),
+                                       QMessageBox.Yes | QMessageBox.No)
         if confirm != QMessageBox.Yes: return
-        self.cleanup_info.setText("Limpando...")
+        self.cleanup_info.setText(_("Cleaning..."))
         try:
             dc = DatabaseCleanup(self._db_path())
             stats = dc.run_cleanup()
             lines = [
-                f"Brutos removidos: {stats['removidos_raw']}",
-                f"Auditoria limpa: {stats['removidos_audit']}",
-                f"Duplicatas: {stats['removidos_dup']}",
-                f"Backups excluídos: {stats['backups_excluidos']}",
-                f"Tamanho: {stats['tamanho_antes_kb']} → {stats['tamanho_depois_kb']} KB",
-                f"Economia: {stats['economia_kb']} KB",
+                _("Raw removed: {n}").format(n=stats['removidos_raw']),
+                _("Audit cleaned: {n}").format(n=stats['removidos_audit']),
+                _("Duplicates: {n}").format(n=stats['removidos_dup']),
+                _("Backups deleted: {n}").format(n=stats['backups_excluidos']),
+                _("Size: {a} -> {b} KB").format(a=stats['tamanho_antes_kb'], b=stats['tamanho_depois_kb']),
+                _("Saved: {n} KB").format(n=stats['economia_kb']),
             ]
             self.cleanup_info.setText("\n".join(lines))
             self.cleanup_info.setStyleSheet("color: #81C784; font-size: 12px; font-weight: bold;")
-            QMessageBox.information(self, _("Sucesso"), f"Limpeza concluída! {stats['economia_kb']} KB recuperados.")
-            registrar_operacao("limpeza", f"Limpeza: {stats['economia_kb']} KB recuperados", "ok")
+            QMessageBox.information(self, _("Success"),
+                                    _("Cleanup complete! {n} KB recovered.").format(n=stats['economia_kb']))
+            registrar_operacao("limpeza", _("Cleanup: {n} KB recovered").format(n=stats['economia_kb']), "ok")
         except Exception as e:
             self.cleanup_info.setText(f"Erro: {e}")
-            QMessageBox.critical(self, _("Erro"), str(e))
+            QMessageBox.critical(self, _("Error"), str(e))

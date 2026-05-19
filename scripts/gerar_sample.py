@@ -36,7 +36,9 @@ def gerar_planilha_normal(nome: str, qtd_linhas: int = 50):
         ws.cell(row=row, column=3, value=random.choice(produtos))
         ws.cell(row=row, column=4, value=random.choice(categorias))
         ws.cell(row=row, column=5, value=round(random.uniform(10, 5000), 2))
-        ws.cell(row=row, column=6, value=f"2025-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}")
+        d = random.randint(1, 28)
+        m = random.randint(1, 12)
+        ws.cell(row=row, column=6, value=f"{d:02d}/{m:02d}/2025")
 
     path = SAMPLE_DIR / nome
     wb.save(path)
@@ -57,9 +59,8 @@ def gerar_planilha_invertida(nome: str, qtd_clientes: int = 10, anos: list = Non
     ws = wb.active
     ws.title = "Vendas"
 
-    # Cabeçalho
     headers = ["Cliente", "Regiao"]
-    meses = [f"{ano}-{mes:02d}" for ano in anos for mes in range(1, 13)]
+    meses = [f"01/{mes:02d}/{ano}" for ano in anos for mes in range(1, 13)]
     headers.extend(meses)
 
     for col, h in enumerate(headers, 1):
@@ -67,6 +68,7 @@ def gerar_planilha_invertida(nome: str, qtd_clientes: int = 10, anos: list = Non
         cell.fill = HEADER_FILL
         cell.font = HEADER_FONT
         cell.alignment = Alignment(horizontal="center", text_rotation=90)
+        cell.number_format = '@'  # força texto para evitar auto-conversão para data
 
     regioes = ["Norte", "Sul", "Leste", "Oeste", "Centro"]
     for row in range(2, qtd_clientes + 2):
@@ -130,7 +132,7 @@ def gerar_planilha_multiplas_tabelas(nome: str):
     ws.title = "Resumo_Geral"
 
     regioes = ["Norte", "Sul", "Leste", "Oeste"]
-    meses = [f"2025-{m:02d}" for m in range(1, 7)]
+    meses = [f"01/{m:02d}/2025" for m in range(1, 7)]
 
     for idx, departamento in enumerate(["Vendas", "Estoque", "Marketing"]):
         if idx > 0:

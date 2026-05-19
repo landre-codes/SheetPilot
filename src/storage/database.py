@@ -3,6 +3,10 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 
+from src.log_setup import get_logger
+
+logger = get_logger(__name__)
+
 
 class Database:
     def __init__(self, db_path: str):
@@ -38,8 +42,33 @@ class Database:
                 cursor.executescript(sql)
                 cursor.execute("INSERT INTO _migrations (filename) VALUES (?)", (f.name,))
                 self.conn.commit()
-                print(f"  [migracao] aplicado: {f.name}")
-        print(f"  [migracao] {len(applied)} migracoes ja aplicadas")
+                logger.info("Migracao aplicada: %s", f.name)
+        logger.info("Migracoes: %d ja aplicadas", len(applied))
+
+    def reset_data(self):
+        """Remove todos os dados de pipeline mantendo schema e metadados."""
+        if not self.conn:
+            return
+        tabelas = [
+            "fact_dados", "dim_coluna", "dim_data", "dim_arquivo",
+            "raw_data", "schema_audit", "sheets", "arquivos",
+        ]
+        c = self.conn.cursor()
+        for tbl in tabelas:
+            c.execute(f"DELETE FROM {tbl}")
+        self.conn.commit()
+        logger.info("Banco resetado: %d tabelas limpas", len(tabelas))
+
+    def reset_hard(self, migrations_dir: str):
+        """Fecha, deleta o arquivo .db e recria do zero."""
+        self.close()
+        path = Path(self.db_path)
+        if path.exists():
+            path.unlink()
+            logger.info("Arquivo %s deletado", self.db_path)
+        self.connect()
+        self.run_migrations(migrations_dir)
+        logger.info("Banco recriado do zero")
 
     def compute_schema_hash(self, colunas: list[str]) -> str:
         raw = "|".join(colunas).strip().lower()

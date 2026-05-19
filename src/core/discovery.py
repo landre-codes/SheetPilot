@@ -4,8 +4,12 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
+from src.core.utils import detectar_grupos, iter_rows_lazy, normalizar_cabecalho
+from src.log_setup import get_logger
 from src.storage.database import Database
 from src.storage.metadata_repo import MetadataRepo
+
+logger = get_logger(__name__)
 
 
 class DiscoveryEngine:
@@ -19,30 +23,10 @@ class DiscoveryEngine:
         self.detectar_tabelas = detectar_tabelas
         self.min_linhas_tabela = min_linhas
 
-    def _detectar_grupos(self, linhas: list) -> list[list]:
-        """Divide linhas em grupos separados por linhas em branco."""
-        if not linhas:
-            return []
-
-        quebras = [-1]
-        for i, row in enumerate(linhas):
-            if all(c is None or str(c).strip() == "" for c in row):
-                quebras.append(i)
-        quebras.append(len(linhas))
-
-        grupos = []
-        for i in range(len(quebras) - 1):
-            inicio = quebras[i] + 1
-            fim = quebras[i + 1]
-            if fim - inicio >= self.min_linhas_tabela:
-                grupos.append(linhas[inicio:fim])
-
-        return grupos
-
     def scan_arquivo(self, caminho: str):
         path = Path(caminho)
         if not path.exists():
-            print(f"  [erro] arquivo nao encontrado: {caminho}")
+            logger.error("Arquivo nao encontrado: %s", caminho)
             return
 
         stats = path.stat()
@@ -56,7 +40,7 @@ class DiscoveryEngine:
             tamanho=tamanho
         )
 
-        print(f"  [scan] {path.name} ({tamanho / 1024:.1f} KB)")
+        logger.info("Scanned %s (%.1f KB)", path.name, tamanho / 1024)
 
     def scan_sheets(self, caminho: str):
         path = Path(caminho)
@@ -73,24 +57,31 @@ class DiscoveryEngine:
                 "SELECT id FROM arquivos WHERE caminho_completo = ?", (str(path.absolute()),)
             ).fetchone()
 
+        if not arquivo_row:
+            logger.error("Nao foi possivel criar registro para: %s", caminho)
+            return
         arquivo_id = arquivo_row["id"]
 
         try:
             wb = load_workbook(path, read_only=True, data_only=True)
         except Exception as e:
-            print(f"  [erro] ao abrir {path.name}: {e}")
+            logger.error("Erro ao abrir %s: %s", path.name, e)
             self.repo.atualizar_status_arquivo(arquivo_id, "erro")
             return
 
         for sheet_name in wb.sheetnames:
             ws = wb[sheet_name]
-            linhas = list(ws.iter_rows(values_only=True))
+
+            # Lê todas as linhas em chunks para evitar materialização completa na RAM
+            linhas = []
+            for chunk in iter_rows_lazy(ws, chunk_size=5000):
+                linhas.extend(chunk)
             if not linhas:
                 continue
 
             # Detectar múltiplas tabelas separadas por linhas em branco
             if self.detectar_tabelas and len(linhas) > self.min_linhas_tabela:
-                grupos = self._detectar_grupos(linhas)
+                grupos = detectar_grupos(linhas, self.min_linhas_tabela)
                 if len(grupos) <= 1:
                     grupos = [linhas]
             else:
@@ -101,7 +92,7 @@ class DiscoveryEngine:
                 if len(grupos) > 1:
                     nome_tabela = f"{sheet_name}__T{idx + 1:03d}"
 
-                cabecalho = [str(c or "") for c in grupo[0]]
+                cabecalho = [normalizar_cabecalho(c) for c in grupo[0]]
                 schema_hash = self.db.compute_schema_hash(cabecalho)
                 colunas = json.dumps(cabecalho, ensure_ascii=False)
                 tipos_inferidos = ["texto"] * len(cabecalho)
@@ -130,20 +121,22 @@ class DiscoveryEngine:
                             adicionadas, removidas
                         )
                         if adicionadas or removidas:
-                            print(f"    [schema change] {nome_tabela}: +{len(adicionadas)} -{len(removidas)}")
+                            logger.info("Schema change %s: +%d -%d", nome_tabela, len(adicionadas), len(removidas))
 
                 suffix = f" (tabela {idx + 1}/{len(grupos)})" if len(grupos) > 1 else ""
-                print(
-                    f"    [sheet] {nome_tabela}: {qtd_linhas} linhas x {qtd_colunas} colunas [hash={schema_hash[:8]}]{suffix}")
+                logger.info("Sheet %s: %d linhas x %d colunas [hash=%s]%s",
+                            nome_tabela, qtd_linhas, qtd_colunas, schema_hash[:8], suffix)
 
         wb.close()
         self.repo.atualizar_status_arquivo(arquivo_id, "scaneado")
 
     def scan_recursivo(self, diretorio: str):
         path = Path(diretorio)
-        print(f"\n[discovery] escaneando: {diretorio}")
-        xlsx_files = list(path.rglob("*.xlsx")) + list(path.rglob("*.xlsb")) + list(path.rglob("*.xlsm")) + list(path.rglob("*.csv")) + list(path.rglob("*.parquet"))
-        print(f"  encontrados {len(xlsx_files)} arquivos")
+        logger.info("Escaneando: %s", diretorio)
+        xlsx_files = []
+        for ext in ["*.xlsx", "*.xlsb", "*.xlsm", "*.csv", "*.parquet"]:
+            xlsx_files.extend(path.rglob(ext))
+        logger.info("Encontrados %d arquivos", len(xlsx_files))
 
         for f in xlsx_files:
             self.scan_arquivo(str(f))
@@ -151,4 +144,4 @@ class DiscoveryEngine:
         for f in xlsx_files:
             self.scan_sheets(str(f))
 
-        print(f"  [discovery] concluido\n")
+        logger.info("Discovery concluido para: %s", diretorio)

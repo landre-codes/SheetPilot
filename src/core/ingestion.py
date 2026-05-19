@@ -1,9 +1,17 @@
-import json, re
+import json
+import re
+from datetime import datetime
 from pathlib import Path
+
 from openpyxl import load_workbook
+
+from src.core.utils import detectar_grupos, iter_rows_lazy
+from src.log_setup import get_logger
 from src.storage.database import Database
 from src.storage.metadata_repo import MetadataRepo
 from src.storage.raw_repo import RawRepo
+
+logger = get_logger(__name__)
 
 
 class IngestionEngine:
@@ -11,34 +19,18 @@ class IngestionEngine:
         self.db = db
         self.meta_repo = MetadataRepo(db)
         self.raw_repo = RawRepo(db)
-        self._cache_grupos: dict[str, list] = {}  # (arquivo_id, parent_sheet) -> grupos
-
-    @staticmethod
-    def _detectar_grupos(linhas: list, min_linhas: int = 3) -> list[list]:
-        """Divide linhas em grupos separados por linhas em branco. (mesma lógica do Discovery)"""
-        if not linhas:
-            return []
-        quebras = [-1]
-        for i, row in enumerate(linhas):
-            if all(c is None or str(c).strip() == "" for c in row):
-                quebras.append(i)
-        quebras.append(len(linhas))
-        grupos = []
-        for i in range(len(quebras) - 1):
-            inicio = quebras[i] + 1
-            fim = quebras[i + 1]
-            if fim - inicio >= min_linhas:
-                grupos.append(linhas[inicio:fim])
-        return grupos
+        self._cache_grupos: dict[str, list] = {}
 
     def _extrair_grupo_por_indice(self, arquivo_id: int, parent_sheet: str, grupo_idx: int, wb) -> list:
-        """Extrai um grupo específico de uma sheet, usando blank-row detection."""
-        import hashlib
+        """Extrai um grupo específico de uma sheet, lendo em chunks para evitar
+        materialização completa na RAM."""
         cache_key = f"{arquivo_id}|{parent_sheet}"
         if cache_key not in self._cache_grupos:
             ws = wb[parent_sheet]
-            linhas = list(ws.iter_rows(values_only=True))
-            self._cache_grupos[cache_key] = self._detectar_grupos(linhas, min_linhas=3)
+            linhas = []
+            for chunk in iter_rows_lazy(ws, chunk_size=5000):
+                linhas.extend(chunk)
+            self._cache_grupos[cache_key] = detectar_grupos(linhas, min_linhas=3)
 
         grupos = self._cache_grupos[cache_key]
         if 0 <= grupo_idx < len(grupos):
@@ -48,7 +40,7 @@ class IngestionEngine:
     def ingestir_arquivo(self, caminho: str):
         path = Path(caminho)
         if not path.exists():
-            print(f"  [erro] arquivo nao encontrado: {caminho}")
+            logger.error("Arquivo nao encontrado: %s", caminho)
             return
 
         abs_path = str(path.absolute())
@@ -57,7 +49,7 @@ class IngestionEngine:
         ).fetchone()
 
         if not arquivo_row:
-            print(f"  [erro] arquivo nao scaneado: {caminho}. Execute scan primeiro.")
+            logger.error("Arquivo nao scaneado: %s. Execute scan primeiro.", caminho)
             return
 
         arquivo_id = arquivo_row["id"]
@@ -66,7 +58,7 @@ class IngestionEngine:
         try:
             wb = load_workbook(path, read_only=True, data_only=True)
         except Exception as e:
-            print(f"  [erro] ao abrir {path.name}: {e}")
+            logger.error("Erro ao abrir %s: %s", path.name, e)
             self.meta_repo.atualizar_status_arquivo(arquivo_id, "erro")
             return
 
@@ -79,22 +71,23 @@ class IngestionEngine:
             schema_hash = sheet_info["schema_hash"]
             colunas = json.loads(sheet_info["schema_colunas"])
 
-            # Verificar se é sub-tabela (ex: "Resumo_Geral__T001")
             m = re.match(r"^(.+)__T(\d+)$", sheet_name)
             if m:
                 parent_name = m.group(1)
-                grupo_idx = int(m.group(2)) - 1  # T001 → índice 0
+                grupo_idx = int(m.group(2)) - 1
                 if parent_name not in wb.sheetnames:
                     continue
                 linhas = self._extrair_grupo_por_indice(arquivo_id, parent_name, grupo_idx, wb)
                 if not linhas:
-                    print(f"    [ingest] {sheet_name}: grupo nao encontrado na sheet '{parent_name}'")
+                    logger.warning("Grupo nao encontrado: %s na sheet '%s'", sheet_name, parent_name)
                     continue
             else:
                 if sheet_name not in wb.sheetnames:
                     continue
                 ws = wb[sheet_name]
-                linhas = list(ws.iter_rows(values_only=True))
+                linhas = []
+                for chunk in iter_rows_lazy(ws, chunk_size=5000):
+                    linhas.extend(chunk)
 
             if len(linhas) <= 1:
                 continue
@@ -107,6 +100,8 @@ class IngestionEngine:
                         nome_col = colunas[col_idx]
                         if valor is None:
                             valor = ""
+                        elif isinstance(valor, datetime):
+                            valor = valor.strftime("%Y-%m-%d")
                         elif isinstance(valor, (float, int)):
                             valor = float(valor) if isinstance(valor, float) else valor
                         row_dict[nome_col] = valor
@@ -117,9 +112,9 @@ class IngestionEngine:
                 self.raw_repo.inserir_em_lote(batch)
                 total_linhas += len(batch)
 
-            print(f"    [ingest] {sheet_name}: {len(batch)} linhas ingeridas")
+            logger.info("Ingerido %s: %d linhas", sheet_name, len(batch))
 
         wb.close()
         self._cache_grupos.clear()
         self.meta_repo.atualizar_status_arquivo(arquivo_id, "ingerido")
-        print(f"  [ingest] {path.name}: {total_linhas} linhas no total")
+        logger.info("Ingestao de %s: %d linhas no total", path.name, total_linhas)

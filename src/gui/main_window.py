@@ -7,11 +7,11 @@ from pathlib import Path
 os.environ.setdefault("QT_ENABLE_HIGHDPI_SCALING", "1")
 os.environ.setdefault("QT_SCALE_FACTOR_ROUNDING_POLICY", "PassThrough")
 
-from PySide6.QtCore import Qt, QRect
-from PySide6.QtGui import QFont, QScreen
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont, QShortcut, QKeySequence
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QStackedWidget, QStatusBar, QLabel
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QSplitter, QStackedWidget, QStatusBar, QLabel,
+    QMessageBox,
 )
 from qt_material import apply_stylesheet
 
@@ -22,6 +22,7 @@ from src.gui.pages import (
 )
 from src.gui.widgets.sidebar import Sidebar
 from src.gui.widgets.titlebar import TitleBar
+from src.localization import _
 from src.storage.database import Database
 
 DEFAULT_DB_DIR = Path.home() / "sheetpilot_db"
@@ -56,17 +57,26 @@ class MainWindow(QMainWindow):
 
         self._setup_frameless()
         self._setup_ui()
+        self._setup_shortcuts()
         self._apply_native_shadow()
         self._check_backup()
         self._show_page("dashboard")
 
     def _init_db(self) -> Database:
-        DEFAULT_DB_DIR.mkdir(parents=True, exist_ok=True)
-        database = Database(self.db_path)
-        database.connect()
-        mig_path = Path(__file__).parent.parent.parent / "migrations"
-        database.run_migrations(str(mig_path))
-        return database
+        try:
+            DEFAULT_DB_DIR.mkdir(parents=True, exist_ok=True)
+            database = Database(self.db_path)
+            database.connect()
+            mig_path = Path(__file__).parent.parent.parent / "migrations"
+            database.run_migrations(str(mig_path))
+            return database
+        except Exception as e:
+            QMessageBox.critical(
+                self, _("Database Error"),
+                _("Could not initialize the database:\n{e}\n\nThe application will be closed.").format(e=e)
+            )
+            QApplication.quit()
+            raise
 
     def _setup_frameless(self):
         flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowMinMaxButtonsHint
@@ -117,15 +127,19 @@ class MainWindow(QMainWindow):
         self.title_bar.window_action.connect(self._handle_title_action)
         root_layout.addWidget(self.title_bar)
 
-        # Body: sidebar + content
-        body = QWidget()
-        body_layout = QHBoxLayout(body)
-        body_layout.setContentsMargins(0, 0, 0, 0)
-        body_layout.setSpacing(0)
+        # Body: sidebar + content com QSplitter para responsividade
+        self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter.setHandleWidth(1)
+        self.splitter.setChildrenCollapsible(False)
+        self.splitter.setStyleSheet("""
+            QSplitter::handle {
+                background-color: #30363d;
+            }
+        """)
 
         self.sidebar = Sidebar()
         self.sidebar.page_changed.connect(self._show_page)
-        body_layout.addWidget(self.sidebar)
+        self.splitter.addWidget(self.sidebar)
 
         self.stack = QStackedWidget()
         self.stack.setStyleSheet("""
@@ -159,9 +173,12 @@ class MainWindow(QMainWindow):
                 width: 0; border: none;
             }
         """)
-        body_layout.addWidget(self.stack, stretch=1)
+        self.splitter.addWidget(self.stack)
 
-        root_layout.addWidget(body, stretch=1)
+        # Define proporção inicial: sidebar 200px, resto para o stack
+        self.splitter.setSizes([200, 1200])
+
+        root_layout.addWidget(self.splitter, stretch=1)
 
         # Status bar
         self.status = QStatusBar()
@@ -205,6 +222,18 @@ class MainWindow(QMainWindow):
         else:
             self.showMaximized()
 
+    def _setup_shortcuts(self):
+        shortcuts = {
+            "Ctrl+1": "dashboard",
+            "Ctrl+2": "importar",
+            "Ctrl+3": "ajustar",
+            "Ctrl+4": "exportar",
+            "Ctrl+5": "settings",
+        }
+        for seq, page_id in shortcuts.items():
+            sc = QShortcut(QKeySequence(seq), self)
+            sc.activated.connect(lambda p=page_id: self._show_page(p))
+
     def _show_page(self, page_id: str):
         page = self._pages.get(page_id)
         if page:
@@ -213,9 +242,11 @@ class MainWindow(QMainWindow):
             if hasattr(page, "refresh"):
                 page.refresh()
             title_map = {
-                "dashboard": "Dashboard", "importar": "Importar",
-                "transformar": "Transformar", "exportar": "Exportar",
-                "settings": "Configurações"
+                "dashboard": "Dashboard",
+                "importar": _("Import"),
+                "ajustar": _("Adjust"),
+                "exportar": _("Export"),
+                "settings": _("Settings"),
             }
             self.title_bar.set_page_title(title_map.get(page_id, ""))
 
@@ -224,14 +255,15 @@ class MainWindow(QMainWindow):
         if bm.precisa_backup():
             from PySide6.QtWidgets import QMessageBox
             reply = QMessageBox.question(
-                self, "Backup Semanal",
-                "Ultimo backup tem mais de 7 dias.\n\nCriar um backup agora?",
+                self, _("Weekly Backup"),
+                _("Last backup is more than 7 days old.\n\nCreate a backup now?"),
                 QMessageBox.Yes | QMessageBox.No
             )
             if reply == QMessageBox.Yes:
                 path = bm.executar_backup()
                 if path:
-                    self.status.showMessage(f"Backup: {Path(path).name}", 8000)
+                    self.status.showMessage(
+                        _("Backup: {name}").format(name=Path(path).name), 8000)
 
     def closeEvent(self, event):
         if self.db:

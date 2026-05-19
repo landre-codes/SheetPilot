@@ -49,7 +49,10 @@ def ingest(ctx, caminho):
     if path.is_file():
         engine.ingestir_arquivo(caminho)
     elif path.is_dir():
-        for f in path.rglob("*.xlsx") + list(path.rglob("*.xlsb")) + list(path.rglob("*.xlsm")) + list(path.rglob("*.csv")) + list(path.rglob("*.parquet")):
+        todos = []
+        for ext in ["*.xlsx", "*.xlsb", "*.xlsm", "*.csv", "*.parquet"]:
+            todos.extend(path.rglob(ext))
+        for f in todos:
             engine.ingestir_arquivo(str(f))
     else:
         click.echo(f"Erro: {caminho} nao encontrado")
@@ -57,7 +60,9 @@ def ingest(ctx, caminho):
 
 @cli.command()
 @click.argument("schema_hash")
-@click.option("--regex", default=r"^\d{4}-\d{2}$", help="Regex para detectar colunas-data")
+@click.option("--regex",
+              default=r"^(?:\d{2}[/-]\d{2}[/-]\d{4}|\d{2}[/-]\d{4}|\d{4}[/-]\d{2}(?:[/-]\d{2})?|\d{4})$",
+              help="Regex para detectar colunas-data")
 @click.pass_context
 def unpivot(ctx, schema_hash, regex):
     """Transforma raw_data em star schema (unpivot)."""
@@ -75,6 +80,26 @@ def inverter(ctx, schema_hash, coluna_id):
     db = ctx.obj["db"]
     engine = TransformEngine(db)
     engine.processar_planilha_invertida(schema_hash, coluna_id)
+
+
+@cli.command()
+@click.option("--hard", is_flag=True, help="Deleta o arquivo .db e recria do zero")
+@click.pass_context
+def reset(ctx, hard):
+    """Reseta todos os dados do pipeline, mantendo o schema."""
+    db = ctx.obj["db"]
+    if hard:
+        if click.confirm("Deletar o banco inteiro e recriar?"):
+            db.reset_hard(ctx.parent.params["migrations"])
+            click.echo("Banco deletado e recriado do zero.")
+        else:
+            click.echo("Reset cancelado.")
+    else:
+        if click.confirm("Remover todos os dados do pipeline (mantendo schema)?"):
+            db.reset_data()
+            click.echo("Dados de pipeline removidos. Schema mantido.")
+        else:
+            click.echo("Reset cancelado.")
 
 
 @cli.command()
@@ -129,18 +154,26 @@ def full_pipeline(ctx):
         click.echo("Nenhum arquivo pendente. Execute 'scan' primeiro ou adicione --db data/pilot.db")
         return
 
-    for arq in pendentes:
-        click.echo(f"\n>>> Processando: {arq['nome_arquivo']}")
-        if arq["status"] == "pendente":
-            discover.scan_sheets(arq["caminho_completo"])
-        ingest_eng.ingestir_arquivo(arq["caminho_completo"])
+    try:
+        for arq in pendentes:
+            click.echo(f"\n>>> Processando: {arq['nome_arquivo']}")
+            if arq["status"] == "pendente":
+                discover.scan_sheets(arq["caminho_completo"])
+            ingest_eng.ingestir_arquivo(arq["caminho_completo"])
 
-    hashes = db.conn.execute(
-        "SELECT DISTINCT schema_hash FROM sheets WHERE schema_hash IS NOT NULL"
-    ).fetchall()
+        hashes = db.conn.execute(
+            "SELECT DISTINCT schema_hash FROM sheets WHERE schema_hash IS NOT NULL"
+        ).fetchall()
 
-    for h in hashes:
-        click.echo(f"\n>>> Transformando schema: {h['schema_hash'][:12]}...")
-        transform.unpivot_para_star_schema(h["schema_hash"])
+        for h in hashes:
+            click.echo(f"\n>>> Transformando schema: {h['schema_hash'][:12]}...")
+            transform.unpivot_para_star_schema(h["schema_hash"])
 
-    click.echo("\n=== PIPELINE CONCLUIDO ===")
+        click.echo("\n=== PIPELINE CONCLUIDO ===")
+    except Exception as e:
+        click.echo(f"\nERRO: {e}")
+        if click.confirm("Resetar dados do pipeline e tentar novamente?"):
+            db.reset_data()
+            click.echo("Banco resetado. Execute novamente.")
+        else:
+            click.echo("Pipeline interrompido. Use 'reset' manual se necessario.")

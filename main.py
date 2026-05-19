@@ -8,8 +8,11 @@ Uso:
   python main.py            (abre GUI com banco padrao em ~/planilha_bi_db/)
 """
 import argparse
+import logging
 import sys
 from pathlib import Path
+
+from src.log_setup import setup_logging
 
 
 def main():
@@ -18,7 +21,14 @@ def main():
     parser.add_argument("--gui", action="store_true", help="Modo GUI (interface grafica)")
     parser.add_argument("--db", default=None, help="Caminho do banco SQLite (opcional na GUI)")
     parser.add_argument("--migrations", default=None, help="Diretorio de migrations")
+    parser.add_argument("--log-level", default="INFO", help="Nivel de log: DEBUG, INFO, WARNING, ERROR")
+    parser.add_argument("--log-dir", default=None, help="Diretorio para log em arquivo (opcional)")
     args, unknown = parser.parse_known_args()
+
+    setup_logging(
+        level=getattr(logging, args.log_level.upper(), logging.INFO),
+        log_dir=args.log_dir,
+    )
 
     base_dir = Path(__file__).parent
 

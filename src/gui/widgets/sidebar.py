@@ -2,20 +2,29 @@ import getpass
 from pathlib import Path
 
 import qtawesome as qta
-from src.localization import _
 from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Signal, QSize
 from PySide6.QtGui import QFont, QPainter, QColor, QBrush, QPen, QLinearGradient, QPixmap
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QPushButton, QLabel, QFrame, QFileDialog
 )
 
+from src.localization import _ as _tr, on_language_change
+
 _PAGINAS = [
-    ("dashboard", "fa5s.home", _("Dashboard")),
-    ("importar", "fa5s.file-import", "Importar"),
-    ("ajustar", "fa5s.sync-alt", "Ajustar"),
-    ("exportar", "fa5s.file-export", "Exportar"),
-    ("settings", "fa5s.cog", "Configurações"),
+    ("dashboard", "fa5s.home", "Dashboard"),
+    ("importar", "fa5s.file-import", "Import"),
+    ("ajustar", "fa5s.sync-alt", "Adjust"),
+    ("exportar", "fa5s.file-export", "Export"),
+    ("settings", "fa5s.cog", "Settings"),
 ]
+
+_PAGINAS_TRANSLATE_KEYS = {
+    "dashboard": "Dashboard",
+    "importar": "Import",
+    "ajustar": "Adjust",
+    "exportar": "Export",
+    "settings": "Settings",
+}
 
 
 class AvatarWidget(QWidget):
@@ -24,7 +33,7 @@ class AvatarWidget(QWidget):
         self.nome = nome
         self.iniciais = self._extrair_iniciais(nome)
         self.setFixedSize(38, 38)
-        self.setToolTip(f"Usuário: {nome}")
+        self.setToolTip(_tr("User: {name}").format(name=nome))
 
     def _extrair_iniciais(self, nome: str) -> str:
         partes = nome.strip().split()
@@ -58,7 +67,7 @@ class LogoTarget(QWidget):
         self.setAcceptDrops(True)
         self._pixmap = None
         self._path = None
-        self.setToolTip("Arraste o logotipo da empresa aqui")
+        self.setToolTip(_tr("Drag company logo here"))
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._load_saved()
 
@@ -106,12 +115,12 @@ class LogoTarget(QWidget):
             p.drawPixmap((self.width() - 24) // 2, (self.height() - 24) // 2 - 6, pix)
             p.setPen(QColor("#455A64"))
             p.setFont(QFont("Segoe UI", 8))
-            p.drawText(self.rect().adjusted(0, 12, 0, 0), Qt.AlignCenter, "Logotipo")
+            p.drawText(self.rect().adjusted(0, 12, 0, 0), Qt.AlignCenter, _tr("Logo"))
         p.end()
 
     def mousePressEvent(self, event):
-        path, _ = QFileDialog.getOpenFileName(self, "Selecionar Logotipo", "",
-                                              "Imagens (*.png *.jpg *.jpeg *.svg *.bmp)")
+        path, _ = QFileDialog.getOpenFileName(self, _tr("Select Logo"), "",
+                                              _tr("Images (*.png *.jpg *.jpeg *.svg *.bmp)"))
         if path:
             self._set_logo(path)
 
@@ -128,11 +137,11 @@ class LogoTarget(QWidget):
 
 
 class SidebarButton(QPushButton):
-    def __init__(self, page_id, icon_name, text, parent=None):
+    def __init__(self, page_id, icon_name, text_key, parent=None):
         super().__init__(parent)
         self.page_id = page_id
         self._icon_name = icon_name
-        self._text = text
+        self._text_key = text_key
         self._icon = qta.icon(icon_name, color="#90A4AE")
         self._icon_active = qta.icon(icon_name, color="white")
         self.setFixedHeight(46)
@@ -140,7 +149,6 @@ class SidebarButton(QPushButton):
         self.setCheckable(True)
         self._expanded = True
         self._active = False
-        self.setToolTip(text)
         self._show_text()
 
     def set_theme_colors(self, text_color="#90A4AE", active_color="white"):
@@ -148,12 +156,18 @@ class SidebarButton(QPushButton):
         self._icon_active = qta.icon(self._icon_name, color=active_color)
         self._show_text()
 
+    def retranslate(self):
+        text = _tr(self._text_key)
+        self.setToolTip(text)
+        self._show_text()
+
     def _show_text(self):
         icon = self._icon_active if self._active else self._icon
+        text = _tr(self._text_key)
         if self._expanded:
             self.setIcon(icon)
             self.setIconSize(QSize(20, 20))
-            self.setText(f" {self._text}")
+            self.setText(f" {text}")
         else:
             self.setIcon(icon)
             self.setIconSize(QSize(22, 22))
@@ -219,6 +233,7 @@ class Sidebar(QWidget):
         self.setFixedWidth(self.EXPANDED_WIDTH)
         self.setMinimumWidth(self.EXPANDED_WIDTH)
         self.setMaximumWidth(self.EXPANDED_WIDTH)
+        on_language_change(lambda: self.retranslate_ui())
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -231,7 +246,7 @@ class Sidebar(QWidget):
         t_btn.setIconSize(QSize(20, 20))
         t_btn.setFixedHeight(40)
         t_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        t_btn.setToolTip(_("Recolher menu"))
+        t_btn.setToolTip(_tr("Collapse menu"))
         t_btn.setStyleSheet("""
             QPushButton {
                 background-color: transparent; border: none; border-radius: 8px;
@@ -257,9 +272,10 @@ class Sidebar(QWidget):
         layout.addSpacing(4)
 
         # Nav buttons
-        for pid, icon, text in _PAGINAS:
-            btn = SidebarButton(pid, icon, text)
+        for pid, icon, text_key in _PAGINAS:
+            btn = SidebarButton(pid, icon, text_key)
             btn.clicked.connect(lambda checked=False, p=pid: self._on_page_clicked(p))
+            btn.retranslate()
             self._buttons.append(btn)
             layout.addWidget(btn)
 
@@ -280,7 +296,7 @@ class Sidebar(QWidget):
         self.user_label.setAlignment(Qt.AlignCenter)
         self.user_label.setFont(QFont("Segoe UI", 10, QFont.Weight.Medium))
         self.user_label.setStyleSheet("color: #90A4AE; border: none;")
-        self.user_label.setToolTip(f"Usuário: {username}")
+        self.user_label.setToolTip(_tr("User: {name}").format(name=username))
         av_layout.addWidget(self.user_label)
 
         self.version_label = QLabel("v0.1.0")
@@ -333,7 +349,7 @@ class Sidebar(QWidget):
             "fa5s.times" if self._expanded else "fa5s.bars", color="#90CAF9"
         ))
         self._toggle_btn.setToolTip(
-            _("Recolher menu") if self._expanded else _("Expandir menu")
+            _tr("Collapse menu") if self._expanded else _tr("Expand menu")
         )
 
         visible = self._expanded
@@ -342,6 +358,13 @@ class Sidebar(QWidget):
             btn.set_expanded(visible)
         self.user_label.setVisible(visible)
         self.version_label.setVisible(visible)
+
+    def retranslate_ui(self):
+        for btn in self._buttons:
+            btn.retranslate()
+        self._toggle_btn.setToolTip(
+            _tr("Collapse menu") if self._expanded else _tr("Expand menu")
+        )
 
     def set_active_page(self, page_id: str):
         for btn in self._buttons:

@@ -2,13 +2,16 @@
 
 **Smart spreadsheet correction & normalization**
 
-SheetPilot detects and corrects inverted spreadsheets where dates are placed as columns instead of rows. It unpivots them into a clean star-schema format, preserves multiple tables within the same sheet, and exports ready-to-use corrected files.
+SheetPilot detects and corrects inverted spreadsheets where dates are placed as columns instead of rows. It unpivots
+them into a clean star-schema format, preserves multiple tables within the same sheet, and exports ready-to-use
+corrected files.
 
 ## Features
 
 - **Inverted table detection** — Automatically finds spreadsheets with dates as columns and normalizes them
 - **Multi-table support** — Detects multiple tables stacked vertically in the same sheet, separated by blank rows
-- **Side-by-side merge** — Corrected tables are placed side by side with visual separators, preserving the original layout
+- **Side-by-side merge** — Corrected tables are placed side by side with visual separators, preserving the original
+  layout
 - **Normal table pass-through** — Already-normalized tables are kept unchanged
 - **Multiple export formats** — xlsx (formatted), xlsb, csv, parquet
 - **Star schema storage** — Data is stored in a normalized star schema (SQLite) for flexible querying
@@ -24,6 +27,7 @@ SheetPilot detects and corrects inverted spreadsheets where dates are placed as 
 ## Installation
 
 ### Requirements
+
 - Python 3.10+
 - Windows (for xlsb export via Excel COM)
 
@@ -63,6 +67,7 @@ python main.py --cli status
 ### Multi-table Detection
 
 Enable in `config/settings.yaml`:
+
 ```yaml
 scan:
   detectar_tabelas: true
